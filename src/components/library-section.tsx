@@ -3,39 +3,26 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BookOpen, Plus, Upload } from "lucide-react";
 
+import { BookReader } from "@/components/book-reader";
 import { Button } from "@/components/ui/button";
+import {
+  COVERS,
+  formatDate,
+  formatSize,
+  type BookExt,
+  type LibraryBook,
+} from "@/lib/books";
 import { cn } from "@/lib/utils";
 
-const COVERS = [
-  "linear-gradient(145deg, #1B365D 0%, #2a4f87 100%)",
-  "linear-gradient(145deg, #2E86AB 0%, #1a6a8a 100%)",
-  "linear-gradient(145deg, #27a96c 0%, #187a4f 100%)",
-  "linear-gradient(145deg, #7c3aed 0%, #5b21b6 100%)",
-  "linear-gradient(145deg, #d97706 0%, #92400e 100%)",
-  "linear-gradient(145deg, #dc2626 0%, #991b1b 100%)",
-  "linear-gradient(145deg, #0f766e 0%, #0d5c56 100%)",
-  "linear-gradient(145deg, #be185d 0%, #9d174d 100%)",
-] as const;
-
-type BookExt = "pdf" | "epub" | "txt";
-
-type LibraryBook = {
-  id: string;
-  title: string;
-  ext: BookExt;
-  cover: string;
-  size: string;
-};
-
-function formatSize(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+function hasFiles(e: DragEvent | React.DragEvent) {
+  return Array.from(e.dataTransfer?.types ?? []).includes("Files");
 }
 
 export function LibrarySection() {
   const [books, setBooks] = useState<LibraryBook[]>([]);
+  const [currentBook, setCurrentBook] = useState<LibraryBook | null>(null);
   const [dragActive, setDragActive] = useState(false);
+  const [zoneActive, setZoneActive] = useState(false);
   const dragDepth = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -48,16 +35,35 @@ export function LibrarySection() {
       return;
     }
 
-    setBooks((prev) => [
-      ...prev,
-      {
-        id: `${Date.now()}_${Math.random().toString(36).slice(2)}`,
-        title: file.name.replace(/\.[^/.]+$/, ""),
-        ext: ext as BookExt,
-        cover: COVERS[prev.length % COVERS.length],
-        size: formatSize(file.size),
-      },
-    ]);
+    const pushBook = (data: LibraryBook["data"]) => {
+      setBooks((prev) => [
+        ...prev,
+        {
+          id: `${Date.now()}_${Math.random().toString(36).slice(2)}`,
+          title: file.name.replace(/\.[^/.]+$/, ""),
+          ext: ext as BookExt,
+          data,
+          cover: COVERS[prev.length % COVERS.length],
+          size: formatSize(file.size),
+          addedAt: new Date(),
+        },
+      ]);
+    };
+
+    // EPUB: keep the raw File — JSZip reads it at open time (legacy behavior).
+    if (ext === "epub") {
+      pushBook(file);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      if (ev.target?.result != null) {
+        pushBook(ev.target.result as string | ArrayBuffer);
+      }
+    };
+    if (ext === "txt") reader.readAsText(file);
+    else reader.readAsArrayBuffer(file);
   }, []);
 
   const onFiles = useCallback(
@@ -68,48 +74,91 @@ export function LibrarySection() {
   );
 
   useEffect(() => {
+    // Skip window DnD while the reader is open.
+    if (currentBook) {
+      setDragActive(false);
+      dragDepth.current = 0;
+      return;
+    }
+
     const onDragEnter = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
       e.preventDefault();
-      if (dragDepth.current++ === 0) setDragActive(true);
+      dragDepth.current += 1;
+      setDragActive(true);
     };
-    const onDragLeave = () => {
-      if (--dragDepth.current <= 0) {
-        dragDepth.current = 0;
-        setDragActive(false);
-      }
+    const onDragLeave = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      dragDepth.current = Math.max(0, dragDepth.current - 1);
+      if (dragDepth.current === 0) setDragActive(false);
     };
-    const onDragOver = (e: DragEvent) => e.preventDefault();
+    const onDragOver = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+    };
     const onDrop = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
       e.preventDefault();
       dragDepth.current = 0;
       setDragActive(false);
       if (e.dataTransfer?.files?.length) onFiles(e.dataTransfer.files);
     };
 
-    document.addEventListener("dragenter", onDragEnter);
-    document.addEventListener("dragleave", onDragLeave);
-    document.addEventListener("dragover", onDragOver);
-    document.addEventListener("drop", onDrop);
+    window.addEventListener("dragenter", onDragEnter);
+    window.addEventListener("dragleave", onDragLeave);
+    window.addEventListener("dragover", onDragOver);
+    window.addEventListener("drop", onDrop);
     return () => {
-      document.removeEventListener("dragenter", onDragEnter);
-      document.removeEventListener("dragleave", onDragLeave);
-      document.removeEventListener("dragover", onDragOver);
-      document.removeEventListener("drop", onDrop);
+      window.removeEventListener("dragenter", onDragEnter);
+      window.removeEventListener("dragleave", onDragLeave);
+      window.removeEventListener("dragover", onDragOver);
+      window.removeEventListener("drop", onDrop);
     };
-  }, [onFiles]);
+  }, [onFiles, currentBook]);
+
+  const zoneHandlers = {
+    onDragEnter: (e: React.DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setZoneActive(true);
+    },
+    onDragOver: (e: React.DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      e.dataTransfer.dropEffect = "copy";
+      setZoneActive(true);
+    },
+    onDragLeave: (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setZoneActive(false);
+    },
+    onDrop: (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setZoneActive(false);
+      setDragActive(false);
+      dragDepth.current = 0;
+      if (e.dataTransfer.files?.length) onFiles(e.dataTransfer.files);
+    },
+  };
 
   return (
     <>
+      {/* Full-window overlay — only while dragging files over the page */}
       <div
         className={cn(
-          "pointer-events-none fixed inset-0 z-[900] flex flex-col items-center justify-center gap-3 bg-navy/80 text-white opacity-0 backdrop-blur-sm transition-opacity",
+          "pointer-events-none fixed inset-0 z-[900] flex flex-col items-center justify-center gap-3 bg-navy/80 text-white opacity-0 backdrop-blur-sm transition-opacity duration-150",
           dragActive && "opacity-100",
         )}
         aria-hidden={!dragActive}
       >
         <Upload className="size-12 opacity-90" />
-        <p className="text-[1.35rem] font-semibold">Drop books to upload</p>
-        <p className="text-[0.88rem] opacity-70">PDF, EPUB, or TXT</p>
+        <p className="text-[1.35rem] font-semibold">Drop to add to your library</p>
+        <p className="text-[0.88rem] opacity-70">PDF · EPUB · TXT</p>
       </div>
 
       <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
@@ -119,8 +168,10 @@ export function LibrarySection() {
           </h1>
           <p className="mt-0.5 text-[0.85rem] text-muted-foreground">
             {books.length === 0
-              ? "Upload your first book to get started"
-              : `${books.length} book${books.length === 1 ? "" : "s"} in your library`}
+              ? "No books yet"
+              : books.length === 1
+                ? "1 book in your collection"
+                : `${books.length} books in your collection`}
           </p>
         </div>
         <Button
@@ -129,7 +180,7 @@ export function LibrarySection() {
           className="h-[42px] rounded-[6px] px-5 font-semibold shadow-[0_3px_12px_rgba(27,54,93,0.3)] hover:-translate-y-px"
         >
           <Plus className="size-4" />
-          Upload book
+          Upload Book
         </Button>
         <input
           ref={fileInputRef}
@@ -145,14 +196,29 @@ export function LibrarySection() {
       </div>
 
       {books.length === 0 ? (
-        <div className="flex flex-col items-center gap-3.5 px-4 py-20 text-center">
-          <BookOpen className="mb-1 size-14 text-navy opacity-20" />
+        <div
+          {...zoneHandlers}
+          className={cn(
+            "flex flex-col items-center gap-3.5 rounded-2xl border-2 border-dashed px-4 py-16 text-center transition-colors",
+            zoneActive || dragActive
+              ? "border-navy bg-navy/5"
+              : "border-border bg-white/60",
+          )}
+        >
+          <div
+            className={cn(
+              "mb-1 flex size-16 items-center justify-center rounded-2xl transition-colors",
+              zoneActive || dragActive ? "bg-navy/10 text-navy" : "bg-muted text-navy/40",
+            )}
+          >
+            <Upload className="size-8" />
+          </div>
           <p className="text-[1.1rem] font-semibold text-foreground">
-            Your library is empty
+            Drag & drop books here
           </p>
           <p className="max-w-80 text-[0.87rem] leading-relaxed text-muted-foreground">
-            Upload a PDF, EPUB, or TXT file — or drag and drop it anywhere on
-            this page.
+            Drop a PDF, EPUB, or TXT anywhere on this page — or click below to
+            browse files.
           </p>
           <Button
             type="button"
@@ -163,11 +229,18 @@ export function LibrarySection() {
           </Button>
         </div>
       ) : (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(176px,1fr))] gap-6">
+        <div
+          className="grid grid-cols-[repeat(auto-fill,minmax(176px,1fr))] gap-6"
+          role="list"
+          aria-label="Book collection"
+        >
           {books.map((book) => (
             <button
               key={book.id}
               type="button"
+              role="listitem"
+              aria-label={`${book.title} — ${book.ext.toUpperCase()}`}
+              onClick={() => setCurrentBook(book)}
               className="group flex flex-col overflow-hidden rounded-xl bg-card text-left shadow-[0_2px_10px_rgba(27,54,93,0.07)] outline-none transition-all hover:-translate-y-1.5 hover:shadow-[0_12px_30px_rgba(27,54,93,0.15)] focus-visible:ring-3 focus-visible:ring-navy/25"
             >
               <div
@@ -182,17 +255,24 @@ export function LibrarySection() {
                 </span>
               </div>
               <div className="flex flex-1 flex-col gap-1 px-3.5 pt-3 pb-3.5">
-                <p className="line-clamp-2 text-[0.875rem] leading-snug font-semibold text-foreground">
+                <p
+                  className="line-clamp-2 text-[0.875rem] leading-snug font-semibold text-foreground"
+                  title={book.title}
+                >
                   {book.title}
                 </p>
                 <p className="truncate text-[0.72rem] text-muted-foreground">
-                  {book.size}
+                  {book.size} · {formatDate(book.addedAt)}
                 </p>
               </div>
             </button>
           ))}
         </div>
       )}
+
+      {currentBook ? (
+        <BookReader book={currentBook} onClose={() => setCurrentBook(null)} />
+      ) : null}
     </>
   );
 }

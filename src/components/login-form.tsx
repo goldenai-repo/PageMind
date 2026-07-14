@@ -1,15 +1,14 @@
 "use client";
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { Eye, EyeOff, Lock, Mail } from "lucide-react";
-
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
+import { Eye, EyeOff, Lock, Mail } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 export function LoginForm({
   className,
@@ -118,10 +117,12 @@ export function LoginForm({
               onChange={(e) => setPassword(e.target.value)}
               className="h-11 rounded-[6px] border-[1.5px] pr-10 pl-10"
             />
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="icon-xs"
               aria-label={showPassword ? "Hide password" : "Show password"}
-              className="absolute top-1/2 right-3 -translate-y-1/2 text-muted-foreground hover:text-navy"
+              className="absolute top-1/2 right-2.5 -translate-y-1/2 text-muted-foreground hover:bg-transparent hover:text-navy"
               onClick={() => setShowPassword((v) => !v)}
             >
               {showPassword ? (
@@ -129,7 +130,7 @@ export function LoginForm({
               ) : (
                 <Eye className="size-4" />
               )}
-            </button>
+            </Button>
           </div>
         </div>
 

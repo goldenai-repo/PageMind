@@ -120,10 +120,12 @@ export function SignUpForm({
               onChange={(e) => setPassword(e.target.value)}
               className="h-11 rounded-[6px] border-[1.5px] pr-10 pl-10"
             />
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="icon-xs"
               aria-label={showPassword ? "Hide password" : "Show password"}
-              className="absolute top-1/2 right-3 -translate-y-1/2 text-muted-foreground hover:text-navy"
+              className="absolute top-1/2 right-2.5 -translate-y-1/2 text-muted-foreground hover:bg-transparent hover:text-navy"
               onClick={() => setShowPassword((v) => !v)}
             >
               {showPassword ? (
@@ -131,7 +133,7 @@ export function SignUpForm({
               ) : (
                 <Eye className="size-4" />
               )}
-            </button>
+            </Button>
           </div>
           <div className="mt-1 flex items-center gap-2.5">
             <div className="h-1 flex-1 overflow-hidden rounded-full bg-border">

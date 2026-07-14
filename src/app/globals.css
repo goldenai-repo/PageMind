@@ -171,3 +171,47 @@
 .pm-panel-in {
   animation: pm-panel-in 0.28s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
+
+/* Reader (ported from legacy dashboard) */
+.reader-txt {
+  max-width: 720px;
+  width: 100%;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 18px rgba(0, 0, 0, 0.08);
+  padding: 2rem 2.5rem;
+  white-space: pre-wrap;
+  line-height: 1.7;
+  color: #2a3140;
+  font-family: "Lora", Georgia, "Times New Roman", serif;
+}
+.toc-list .toc-item {
+  margin: 0;
+}
+.toc-list .toc-link {
+  display: block;
+  padding: 0.55rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.84rem;
+  line-height: 1.35;
+  color: #444c5a;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.toc-list .toc-link:hover {
+  background: #e8eef5;
+  color: #1b365d;
+}
+.toc-list .toc-link.active {
+  background: #1b365d;
+  color: #fff;
+}
+.reader-content.is-epub {
+  display: flex;
+  justify-content: center;
+}
+.reader-content.is-epub #epub-viewer {
+  max-width: 820px;
+}
