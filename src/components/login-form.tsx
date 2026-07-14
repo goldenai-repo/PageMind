@@ -43,6 +43,26 @@ export function LoginForm({
     }
   };
 
+  const handleGoogleLogin = async () => {
+    const supabase = createClient();
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
+        },
+      });
+      if (error) throw error;
+      // Browser will redirect to Google; no need to clear loading here.
+    } catch (error: unknown) {
+      setError(error instanceof Error ? error.message : "An error occurred");
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className={cn("px-8 py-10 sm:px-11", className)} {...props}>
       <div className="mb-7">
@@ -136,10 +156,9 @@ export function LoginForm({
         <Button
           type="button"
           variant="outline"
+          disabled={isLoading}
           className="h-11 rounded-[6px] border-[1.5px] font-medium"
-          onClick={() =>
-            setError("Google sign-in will be enabled once OAuth is configured.")
-          }
+          onClick={handleGoogleLogin}
         >
           <GoogleIcon />
           Google
