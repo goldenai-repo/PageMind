@@ -1,0 +1,198 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { BookOpen, Plus, Upload } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
+const COVERS = [
+  "linear-gradient(145deg, #1B365D 0%, #2a4f87 100%)",
+  "linear-gradient(145deg, #2E86AB 0%, #1a6a8a 100%)",
+  "linear-gradient(145deg, #27a96c 0%, #187a4f 100%)",
+  "linear-gradient(145deg, #7c3aed 0%, #5b21b6 100%)",
+  "linear-gradient(145deg, #d97706 0%, #92400e 100%)",
+  "linear-gradient(145deg, #dc2626 0%, #991b1b 100%)",
+  "linear-gradient(145deg, #0f766e 0%, #0d5c56 100%)",
+  "linear-gradient(145deg, #be185d 0%, #9d174d 100%)",
+] as const;
+
+type BookExt = "pdf" | "epub" | "txt";
+
+type LibraryBook = {
+  id: string;
+  title: string;
+  ext: BookExt;
+  cover: string;
+  size: string;
+};
+
+function formatSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+export function LibrarySection() {
+  const [books, setBooks] = useState<LibraryBook[]>([]);
+  const [dragActive, setDragActive] = useState(false);
+  const dragDepth = useRef(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const processFile = useCallback((file: File) => {
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    if (!ext || !["pdf", "epub", "txt"].includes(ext)) {
+      alert(
+        `Unsupported format: .${ext}\nPageMind supports PDF, EPUB, and TXT.`,
+      );
+      return;
+    }
+
+    setBooks((prev) => [
+      ...prev,
+      {
+        id: `${Date.now()}_${Math.random().toString(36).slice(2)}`,
+        title: file.name.replace(/\.[^/.]+$/, ""),
+        ext: ext as BookExt,
+        cover: COVERS[prev.length % COVERS.length],
+        size: formatSize(file.size),
+      },
+    ]);
+  }, []);
+
+  const onFiles = useCallback(
+    (list: FileList | File[]) => {
+      Array.from(list).forEach(processFile);
+    },
+    [processFile],
+  );
+
+  useEffect(() => {
+    const onDragEnter = (e: DragEvent) => {
+      e.preventDefault();
+      if (dragDepth.current++ === 0) setDragActive(true);
+    };
+    const onDragLeave = () => {
+      if (--dragDepth.current <= 0) {
+        dragDepth.current = 0;
+        setDragActive(false);
+      }
+    };
+    const onDragOver = (e: DragEvent) => e.preventDefault();
+    const onDrop = (e: DragEvent) => {
+      e.preventDefault();
+      dragDepth.current = 0;
+      setDragActive(false);
+      if (e.dataTransfer?.files?.length) onFiles(e.dataTransfer.files);
+    };
+
+    document.addEventListener("dragenter", onDragEnter);
+    document.addEventListener("dragleave", onDragLeave);
+    document.addEventListener("dragover", onDragOver);
+    document.addEventListener("drop", onDrop);
+    return () => {
+      document.removeEventListener("dragenter", onDragEnter);
+      document.removeEventListener("dragleave", onDragLeave);
+      document.removeEventListener("dragover", onDragOver);
+      document.removeEventListener("drop", onDrop);
+    };
+  }, [onFiles]);
+
+  return (
+    <>
+      <div
+        className={cn(
+          "pointer-events-none fixed inset-0 z-[900] flex flex-col items-center justify-center gap-3 bg-navy/80 text-white opacity-0 backdrop-blur-sm transition-opacity",
+          dragActive && "opacity-100",
+        )}
+        aria-hidden={!dragActive}
+      >
+        <Upload className="size-12 opacity-90" />
+        <p className="text-[1.35rem] font-semibold">Drop books to upload</p>
+        <p className="text-[0.88rem] opacity-70">PDF, EPUB, or TXT</p>
+      </div>
+
+      <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-[1.55rem] font-bold tracking-tight text-navy">
+            My Library
+          </h1>
+          <p className="mt-0.5 text-[0.85rem] text-muted-foreground">
+            {books.length === 0
+              ? "Upload your first book to get started"
+              : `${books.length} book${books.length === 1 ? "" : "s"} in your library`}
+          </p>
+        </div>
+        <Button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className="h-[42px] rounded-[6px] px-5 font-semibold shadow-[0_3px_12px_rgba(27,54,93,0.3)] hover:-translate-y-px"
+        >
+          <Plus className="size-4" />
+          Upload book
+        </Button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".pdf,.epub,.txt"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            if (e.target.files?.length) onFiles(e.target.files);
+            e.target.value = "";
+          }}
+        />
+      </div>
+
+      {books.length === 0 ? (
+        <div className="flex flex-col items-center gap-3.5 px-4 py-20 text-center">
+          <BookOpen className="mb-1 size-14 text-navy opacity-20" />
+          <p className="text-[1.1rem] font-semibold text-foreground">
+            Your library is empty
+          </p>
+          <p className="max-w-80 text-[0.87rem] leading-relaxed text-muted-foreground">
+            Upload a PDF, EPUB, or TXT file — or drag and drop it anywhere on
+            this page.
+          </p>
+          <Button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="mt-2 h-10 rounded-[6px] px-6 font-semibold shadow-[0_3px_12px_rgba(27,54,93,0.28)]"
+          >
+            Upload your first book
+          </Button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(176px,1fr))] gap-6">
+          {books.map((book) => (
+            <button
+              key={book.id}
+              type="button"
+              className="group flex flex-col overflow-hidden rounded-xl bg-card text-left shadow-[0_2px_10px_rgba(27,54,93,0.07)] outline-none transition-all hover:-translate-y-1.5 hover:shadow-[0_12px_30px_rgba(27,54,93,0.15)] focus-visible:ring-3 focus-visible:ring-navy/25"
+            >
+              <div
+                className="relative flex h-[210px] shrink-0 items-center justify-center overflow-hidden"
+                style={{ background: book.cover }}
+              >
+                <div className="absolute inset-y-0 left-0 w-[13px] border-r border-white/10 bg-black/20" />
+                <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.14)_0%,transparent_55%)]" />
+                <BookOpen className="size-10 text-white opacity-40" />
+                <span className="absolute right-2.5 bottom-2.5 rounded bg-black/30 px-1.5 py-0.5 text-[0.63rem] font-bold tracking-wider text-white/90 backdrop-blur-sm">
+                  {book.ext.toUpperCase()}
+                </span>
+              </div>
+              <div className="flex flex-1 flex-col gap-1 px-3.5 pt-3 pb-3.5">
+                <p className="line-clamp-2 text-[0.875rem] leading-snug font-semibold text-foreground">
+                  {book.title}
+                </p>
+                <p className="truncate text-[0.72rem] text-muted-foreground">
+                  {book.size}
+                </p>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}

@@ -44,6 +44,15 @@ export async function updateSession(request: NextRequest) {
     path.startsWith('/login') ||
     path.startsWith('/auth')
 
+  if (
+    user &&
+    (path.startsWith('/auth/login') || path.startsWith('/auth/sign-up'))
+  ) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/dashboard'
+    return NextResponse.redirect(url)
+  }
+
   if (!user && !isPublic) {
     const url = request.nextUrl.clone()
     url.pathname = '/auth/login'
