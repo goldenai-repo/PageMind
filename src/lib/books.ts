@@ -18,9 +18,30 @@ export type LibraryBook = {
   cover: string;
   size: string;
   addedAt: Date;
-  /** File for EPUB; ArrayBuffer for PDF; string for TXT */
-  data: File | ArrayBuffer | string;
+  /** Public URL of the file in the 'books' Storage bucket. */
+  fileUrl: string;
+  /**
+   * File for EPUB; ArrayBuffer for PDF; string for TXT. Undefined until the
+   * reader is opened — fetched on demand via downloadBookData() so listing
+   * the library doesn't require downloading every file's bytes upfront.
+   */
+  data?: File | ArrayBuffer | string;
 };
+
+/** Deterministic cover gradient per book id, stable across refetches/reorders. */
+export function coverForId(id: string): string {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = (hash * 31 + id.charCodeAt(i)) | 0;
+  }
+  return COVERS[Math.abs(hash) % COVERS.length];
+}
+
+/** The 'books' table has no dedicated ext column, so it's read off the file's URL. */
+export function extFromUrl(url: string): BookExt | null {
+  const ext = url.split(/[?#]/)[0].split(".").pop()?.toLowerCase();
+  return ext === "pdf" || ext === "epub" || ext === "txt" ? ext : null;
+}
 
 export function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
