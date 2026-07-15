@@ -1,37 +1,27 @@
-export async function renderPdfPages(
+export type PdfPageImage = {
+  src: string;
+  width: number;
+  height: number;
+};
+
+export async function renderPdfPageImages(
   arrayBuffer: ArrayBuffer,
-  container: HTMLElement,
+  maxWidth: number,
   signal?: AbortSignal,
-) {
+): Promise<PdfPageImage[]> {
   const pdfjs = await import("pdfjs-dist");
   pdfjs.GlobalWorkerOptions.workerSrc =
     "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
   const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
-  const totalPages = pdf.numPages;
+  const images: PdfPageImage[] = [];
 
-  container.innerHTML = "";
-
-  for (let n = 1; n <= totalPages; n++) {
-    if (signal?.aborted) return;
-
-    if (totalPages > 1) {
-      let prog = container.querySelector(
-        ".pdf-progress",
-      ) as HTMLParagraphElement | null;
-      if (!prog) {
-        prog = document.createElement("p");
-        prog.className =
-          "pdf-progress text-center text-[0.8rem] text-muted-foreground py-3 pb-6";
-        container.appendChild(prog);
-      }
-      prog.textContent = `Rendering page ${n} of ${totalPages}…`;
-    }
+  for (let n = 1; n <= pdf.numPages; n++) {
+    if (signal?.aborted) return images;
 
     const page = await pdf.getPage(n);
-    const bodyWidth = Math.max(container.clientWidth - 48, 300);
     const base = page.getViewport({ scale: 1 });
-    const scale = Math.min(1.8, bodyWidth / base.width);
+    const scale = Math.min(2, Math.max(0.5, maxWidth / base.width));
     const viewport = page.getViewport({ scale });
 
     const canvas = document.createElement("canvas");
@@ -42,14 +32,12 @@ export async function renderPdfPages(
       viewport,
     }).promise;
 
-    const wrapper = document.createElement("div");
-    wrapper.className =
-      "pdf-page-wrapper mx-auto mb-4 overflow-hidden rounded-lg bg-white shadow-[0_2px_12px_rgba(0,0,0,0.08)]";
-    wrapper.appendChild(canvas);
-
-    const prog = container.querySelector(".pdf-progress");
-    container.insertBefore(wrapper, prog);
+    images.push({
+      src: canvas.toDataURL("image/jpeg", 0.92),
+      width: viewport.width,
+      height: viewport.height,
+    });
   }
 
-  container.querySelector(".pdf-progress")?.remove();
+  return images;
 }
