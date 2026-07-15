@@ -17,6 +17,7 @@ function hasFiles(e: DragEvent | React.DragEvent) {
 
 export function LibrarySection() {
   const [supabase] = useState(createClient);
+  const [userId, setUserId] = useState<string | null>(null);
   const [books, setBooks] = useState<LibraryBook[]>([]);
   const [libraryLoading, setLibraryLoading] = useState(true);
   const [uploadingCount, setUploadingCount] = useState(0);
@@ -27,12 +28,20 @@ export function LibrarySection() {
   const dragDepth = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load the shared library from Supabase on mount.
+  // Load the signed-in user's own library from Supabase on mount.
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      const { data, error } = await supabase.auth.getUser();
+      if (cancelled) return;
+      if (error || !data.user) {
+        toast.error("You're not signed in.");
+        setLibraryLoading(false);
+        return;
+      }
+      setUserId(data.user.id);
       try {
-        const rows = await listBooks(supabase);
+        const rows = await listBooks(supabase, data.user.id);
         if (!cancelled) setBooks(rows);
       } catch (err) {
         if (!cancelled) {
@@ -58,11 +67,21 @@ export function LibrarySection() {
         });
         return;
       }
+      if (!userId) {
+        toast.error("You must be signed in to upload books.");
+        return;
+      }
 
       setUploadingCount((n) => n + 1);
       try {
         const title = file.name.replace(/\.[^/.]+$/, "");
-        const book = await uploadBook(supabase, file, ext as BookExt, title);
+        const book = await uploadBook(
+          supabase,
+          userId,
+          file,
+          ext as BookExt,
+          title,
+        );
         setBooks((prev) => [...prev, book]);
       } catch (err) {
         toast.error(`Could not upload "${file.name}"`, {
@@ -72,7 +91,7 @@ export function LibrarySection() {
         setUploadingCount((n) => n - 1);
       }
     },
-    [supabase],
+    [supabase, userId],
   );
 
   const onFiles = useCallback(
@@ -210,6 +229,7 @@ export function LibrarySection() {
         <Button
           type="button"
           onClick={() => fileInputRef.current?.click()}
+          disabled={!userId}
           className="h-[42px] rounded-[6px] px-5 font-semibold shadow-[0_3px_12px_rgba(27,54,93,0.3)] hover:-translate-y-px"
         >
           <Plus className="size-4" />

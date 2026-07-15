@@ -41,13 +41,15 @@ function rowToBook(row: BookRow): LibraryBook | null {
   };
 }
 
-/** Fetches all book metadata rows, oldest first. Storage bytes are not fetched here. */
+/** Fetches the signed-in user's book metadata, oldest first. Storage bytes are not fetched here. */
 export async function listBooks(
   supabase: SupabaseClient,
+  userId: string,
 ): Promise<LibraryBook[]> {
   const { data, error } = await supabase
     .from("books")
     .select(BOOK_COLUMNS)
+    .eq("user_id", userId)
     .order("id", { ascending: true });
   if (error) throw new Error(error.message);
   return (data as BookRow[])
@@ -55,14 +57,15 @@ export async function listBooks(
     .filter((book): book is LibraryBook => book !== null);
 }
 
-/** Uploads the raw file to Storage, then records its metadata in the DB. */
+/** Uploads the raw file to the caller's folder in Storage, then records its metadata in the DB. */
 export async function uploadBook(
   supabase: SupabaseClient,
+  userId: string,
   file: File,
   ext: BookExt,
   title: string,
 ): Promise<LibraryBook> {
-  const storagePath = `${crypto.randomUUID()}.${ext}`;
+  const storagePath = `${userId}/${crypto.randomUUID()}.${ext}`;
 
   const { error: uploadError } = await supabase.storage
     .from(BUCKET)
@@ -79,6 +82,7 @@ export async function uploadBook(
       title,
       file_url: publicUrlData.publicUrl,
       file_size: file.size,
+      user_id: userId,
     })
     .select(BOOK_COLUMNS)
     .single();
