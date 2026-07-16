@@ -181,6 +181,7 @@
   box-shadow: 0 2px 18px rgba(0, 0, 0, 0.08);
   padding: 2rem 2.5rem;
   white-space: pre-wrap;
+  overflow-wrap: break-word;
   line-height: 1.7;
   color: #2a3140;
   font-family: "Lora", Georgia, "Times New Roman", serif;

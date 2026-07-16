@@ -27,7 +27,7 @@ export type EpubMountOptions = {
   onNavChange?: (state: EpubNavState) => void;
 };
 
-const CHAPTER_LABEL_RE =
+export const CHAPTER_LABEL_RE =
   /^(?:chapter|part|section|book|volume|preface|introduction|intro|conclusion|appendix|epilogue|prologue|afterword)(?:\s+[\w.]+)?\.?$/i;
 
 export async function mountEpubReader(
