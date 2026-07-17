@@ -12,6 +12,7 @@ import {
   type BookExt,
   type LibraryBook,
 } from "@/lib/books";
+import { loadBooks, saveBook } from "@/lib/storage";
 import { cn } from "@/lib/utils";
 
 function hasFiles(e: DragEvent | React.DragEvent) {
@@ -21,6 +22,10 @@ function hasFiles(e: DragEvent | React.DragEvent) {
 export function LibrarySection() {
   const [books, setBooks] = useState<LibraryBook[]>([]);
   const [currentBook, setCurrentBook] = useState<LibraryBook | null>(null);
+
+  useEffect(() => {
+    loadBooks().then(setBooks).catch(console.error);
+  }, []);
   const [dragActive, setDragActive] = useState(false);
   const [zoneActive, setZoneActive] = useState(false);
   const dragDepth = useRef(0);
@@ -36,9 +41,8 @@ export function LibrarySection() {
     }
 
     const pushBook = (data: LibraryBook["data"]) => {
-      setBooks((prev) => [
-        ...prev,
-        {
+      setBooks((prev) => {
+        const book: LibraryBook = {
           id: `${Date.now()}_${Math.random().toString(36).slice(2)}`,
           title: file.name.replace(/\.[^/.]+$/, ""),
           ext: ext as BookExt,
@@ -46,8 +50,10 @@ export function LibrarySection() {
           cover: COVERS[prev.length % COVERS.length],
           size: formatSize(file.size),
           addedAt: new Date(),
-        },
-      ]);
+        };
+        void saveBook(book);
+        return [...prev, book];
+      });
     };
 
     // EPUB: keep the raw File — JSZip reads it at open time (legacy behavior).
