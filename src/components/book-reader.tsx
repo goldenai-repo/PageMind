@@ -252,7 +252,7 @@ export function BookReader({ book, onClose }: BookReaderProps) {
             ref={contentRef}
             className={cn(
               "reader-content min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-6",
-              book.ext === "txt" && "flex justify-center",
+              book.ext === "txt" && "flex items-start justify-center",
             )}
             tabIndex={0}
           />
