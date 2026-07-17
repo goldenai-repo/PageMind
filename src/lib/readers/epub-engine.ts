@@ -1,22 +1,13 @@
 import JSZip from "jszip";
 
+import { createPaginator } from "./paginator";
+import type { ReaderNavState, ReaderRendition } from "./types";
+
 type ManifestItem = { id: string; href: string; mt: string };
 type TocEntry = { label: string; href: string };
 
-export type EpubNavState = {
-  canPrev: boolean;
-  canNext: boolean;
-  pageLabel: string;
-};
-
-export type EpubRendition = {
-  destroy: () => void;
-  prev: () => Promise<void>;
-  next: () => Promise<void>;
-  themes: {
-    fontSize: (px: string) => void;
-  };
-};
+export type EpubNavState = ReaderNavState;
+export type EpubRendition = ReaderRendition;
 
 export type EpubMountOptions = {
   file: File;
@@ -155,9 +146,9 @@ export async function mountEpubReader(
   viewerEl.style.cssText = [
     "width:100%",
     // Page mode: the page fills the visible area and keeps that size;
-    // chapter text scrolls inside it.
+    // chapter text is paginated inside it.
     "height:100%",
-    "overflow-y:auto",
+    "overflow:hidden",
     "background:#fff",
     "padding:1.5rem 3rem",
     "box-sizing:border-box",
@@ -169,6 +160,11 @@ export async function mountEpubReader(
     "font-family:'Lora',Georgia,'Times New Roman',serif",
   ].join(";");
 
+  const viewportEl = document.createElement("div");
+  const pagerEl = document.createElement("div");
+  viewportEl.appendChild(pagerEl);
+  viewerEl.appendChild(viewportEl);
+
   contentEl.innerHTML = "";
   contentEl.classList.add("is-epub");
   contentEl.appendChild(viewerEl);
@@ -176,16 +172,46 @@ export async function mountEpubReader(
   let currentIdx = 0;
   let activeTocLink: HTMLAnchorElement | null = null;
 
+  function emitNav() {
+    const item = spine[currentIdx];
+    const tocMatch = tocEntries.find((e) =>
+      item.href.endsWith(e.href.split("#")[0]),
+    );
+    const base = tocMatch
+      ? tocMatch.label
+      : `Part ${currentIdx + 1} of ${spine.length}`;
+    const suffix =
+      paginator.pageCount > 1
+        ? ` · ${paginator.page + 1}/${paginator.pageCount}`
+        : "";
+    onNavChange?.({
+      canPrev: currentIdx > 0 || paginator.page > 0,
+      canNext:
+        currentIdx < spine.length - 1 ||
+        paginator.page < paginator.pageCount - 1,
+      pageLabel: base + suffix,
+    });
+  }
+
+  const paginator = createPaginator({
+    viewport: viewportEl,
+    pager: pagerEl,
+    onPageChange: emitNav,
+  });
+
   function setActiveTocLink(linkEl: HTMLAnchorElement | null) {
     if (activeTocLink) activeTocLink.classList.remove("active");
     activeTocLink = linkEl;
     if (activeTocLink) activeTocLink.classList.add("active");
   }
 
-  async function displayItem(idx: number, callerLink: HTMLAnchorElement | null = null) {
+  async function displayItem(
+    idx: number,
+    opts: { link?: HTMLAnchorElement | null; atEnd?: boolean } = {},
+  ) {
     if (idx < 0 || idx >= spine.length) return;
     currentIdx = idx;
-    viewerEl.innerHTML =
+    pagerEl.innerHTML =
       '<p style="color:#888;text-align:center;padding:2rem">Loading…</p>';
 
     const item = spine[idx];
@@ -216,7 +242,7 @@ export async function mountEpubReader(
       return blobUrl ? `${attr}="${blobUrl}"` : match;
     });
 
-    viewerEl.innerHTML = `<style>
+    pagerEl.innerHTML = `<style>
       ${combinedCss}
       body, p, div, span, li, td, th {
         font-family: 'Lora', Georgia, 'Times New Roman', serif;
@@ -232,15 +258,15 @@ export async function mountEpubReader(
         margin-bottom: 0.4em;
         font-weight: 600;
       }
-      img  { max-width:100%; height:auto; display:block; margin:1.25rem auto; }
+      img  { max-width:100%; max-height:95%; height:auto; display:block; margin:1.25rem auto; break-inside:avoid; }
       pre, code { white-space:pre-wrap; font-family:monospace; line-height:1.5; }
       a    { color:#2E6DA4; }
       blockquote { border-left:3px solid #c5cdd8; margin:1em 0; padding-left:1em; color:#555; }
     </style>${body}`;
-    viewerEl.scrollTop = 0;
+    paginator.reset(opts.atEnd ? Number.MAX_SAFE_INTEGER : 0);
 
-    if (callerLink) {
-      setActiveTocLink(callerLink);
+    if (opts.link) {
+      setActiveTocLink(opts.link);
     } else {
       const firstMatch =
         [...tocListEl.querySelectorAll<HTMLAnchorElement>(".toc-link")].find(
@@ -248,17 +274,6 @@ export async function mountEpubReader(
         ) ?? null;
       setActiveTocLink(firstMatch);
     }
-
-    const tocMatch = tocEntries.find((e) =>
-      item.href.endsWith(e.href.split("#")[0]),
-    );
-    onNavChange?.({
-      canPrev: idx > 0,
-      canNext: idx < spine.length - 1,
-      pageLabel: tocMatch
-        ? tocMatch.label
-        : `Part ${idx + 1} of ${spine.length}`,
-    });
   }
 
   tocListEl.innerHTML = "";
@@ -287,13 +302,13 @@ export async function mountEpubReader(
       const [, frag] = entry.href.split("#");
       const idx = spine.indexOf(spineItem);
       if (idx !== currentIdx) {
-        await displayItem(idx, a);
+        await displayItem(idx, { link: a });
       } else {
         setActiveTocLink(a);
       }
       if (frag) {
-        const target = viewerEl.querySelector("#" + CSS.escape(frag));
-        if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+        const target = pagerEl.querySelector("#" + CSS.escape(frag));
+        if (target) paginator.goTo(paginator.pageForElement(target));
       }
     });
 
@@ -307,13 +322,28 @@ export async function mountEpubReader(
 
   return {
     destroy() {
+      paginator.destroy();
       Object.values(imgBlobCache).forEach((u) => URL.revokeObjectURL(u));
     },
-    prev: () => displayItem(currentIdx - 1),
-    next: () => displayItem(currentIdx + 1),
+    prev: async () => {
+      if (paginator.page > 0) {
+        paginator.goTo(paginator.page - 1);
+      } else if (currentIdx > 0) {
+        // Arriving from the following chapter: land on its last page
+        await displayItem(currentIdx - 1, { atEnd: true });
+      }
+    },
+    next: async () => {
+      if (paginator.page < paginator.pageCount - 1) {
+        paginator.goTo(paginator.page + 1);
+      } else if (currentIdx < spine.length - 1) {
+        await displayItem(currentIdx + 1);
+      }
+    },
     themes: {
       fontSize(px: string) {
         viewerEl.style.fontSize = px;
+        paginator.reflow();
       },
     },
   };

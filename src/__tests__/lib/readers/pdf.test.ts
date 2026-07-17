@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { renderPdfPages } from "@/lib/readers/pdf";
+import { mountPdfReader } from "@/lib/readers/pdf";
 import * as pdfjsMock from "pdfjs-dist";
 
 vi.mock("pdfjs-dist", () => ({
@@ -7,100 +7,119 @@ vi.mock("pdfjs-dist", () => ({
   getDocument: vi.fn(),
 }));
 
-function makeMockPdf(numPages: number) {
-  return {
+function mockDoc(numPages: number) {
+  const doc = {
     numPages,
+    destroy: vi.fn(),
     getPage: vi.fn().mockImplementation(async () => ({
       getViewport: vi.fn().mockReturnValue({ width: 800, height: 1000 }),
       render: vi.fn().mockReturnValue({ promise: Promise.resolve() }),
     })),
   };
+  vi.mocked(pdfjsMock.getDocument).mockReturnValue({
+    promise: Promise.resolve(doc),
+  } as unknown as ReturnType<typeof pdfjsMock.getDocument>);
+  return doc;
 }
 
 beforeEach(() => {
-  vi.mocked(pdfjsMock.getDocument).mockReturnValue({
-    promise: Promise.resolve(makeMockPdf(2)),
-  } as ReturnType<typeof pdfjsMock.getDocument>);
+  vi.mocked(pdfjsMock.getDocument).mockReset();
+  mockDoc(3);
 });
 
-describe("renderPdfPages", () => {
-  it("renders one canvas per page", async () => {
-    vi.mocked(pdfjsMock.getDocument).mockReturnValue({
-      promise: Promise.resolve(makeMockPdf(3)),
-    } as ReturnType<typeof pdfjsMock.getDocument>);
+describe("mountPdfReader", () => {
+  it("renders exactly one page canvas inside the page wrapper", async () => {
+    const contentEl = document.createElement("div");
+    await mountPdfReader({ data: new ArrayBuffer(0), contentEl });
 
-    const container = document.createElement("div");
-    await renderPdfPages(new ArrayBuffer(0), container);
-
-    expect(container.querySelectorAll("canvas")).toHaveLength(3);
+    expect(contentEl.querySelectorAll("canvas")).toHaveLength(1);
+    expect(contentEl.querySelector(".pdf-page-wrapper")).toBeTruthy();
   });
 
-  it("wraps each canvas in a pdf-page-wrapper div", async () => {
-    const container = document.createElement("div");
-    await renderPdfPages(new ArrayBuffer(0), container);
+  it("reports nav state for the first page", async () => {
+    const onNavChange = vi.fn();
+    const contentEl = document.createElement("div");
+    await mountPdfReader({ data: new ArrayBuffer(0), contentEl, onNavChange });
 
-    const wrappers = container.querySelectorAll(".pdf-page-wrapper");
-    expect(wrappers).toHaveLength(2);
-    for (const w of wrappers) {
-      expect(w.querySelector("canvas")).toBeTruthy();
-    }
+    expect(onNavChange).toHaveBeenLastCalledWith({
+      canPrev: false,
+      canNext: true,
+      pageLabel: "Page 1 of 3",
+    });
   });
 
-  it("clears the container before rendering", async () => {
-    const container = document.createElement("div");
-    container.innerHTML = "<p>stale content</p>";
+  it("next() shows the following page, still as a single canvas", async () => {
+    const onNavChange = vi.fn();
+    const contentEl = document.createElement("div");
+    const rendition = await mountPdfReader({
+      data: new ArrayBuffer(0),
+      contentEl,
+      onNavChange,
+    });
 
-    await renderPdfPages(new ArrayBuffer(0), container);
+    await rendition.next();
 
-    expect(container.querySelector("p")).toBeNull();
+    expect(onNavChange).toHaveBeenLastCalledWith({
+      canPrev: true,
+      canNext: true,
+      pageLabel: "Page 2 of 3",
+    });
+    expect(contentEl.querySelectorAll("canvas")).toHaveLength(1);
   });
 
-  it("removes the progress indicator after all pages render", async () => {
-    vi.mocked(pdfjsMock.getDocument).mockReturnValue({
-      promise: Promise.resolve(makeMockPdf(3)),
-    } as ReturnType<typeof pdfjsMock.getDocument>);
+  it("prev() and next() are no-ops at the bounds", async () => {
+    mockDoc(1);
+    const onNavChange = vi.fn();
+    const contentEl = document.createElement("div");
+    const rendition = await mountPdfReader({
+      data: new ArrayBuffer(0),
+      contentEl,
+      onNavChange,
+    });
 
-    const container = document.createElement("div");
-    await renderPdfPages(new ArrayBuffer(0), container);
+    onNavChange.mockClear();
+    await rendition.prev();
+    await rendition.next();
 
-    expect(container.querySelector(".pdf-progress")).toBeNull();
+    expect(onNavChange).not.toHaveBeenCalled();
   });
 
-  it("does not show a progress indicator for single-page PDFs", async () => {
-    vi.mocked(pdfjsMock.getDocument).mockReturnValue({
-      promise: Promise.resolve(makeMockPdf(1)),
-    } as ReturnType<typeof pdfjsMock.getDocument>);
-
-    const container = document.createElement("div");
-    await renderPdfPages(new ArrayBuffer(0), container);
-
-    expect(container.querySelector(".pdf-progress")).toBeNull();
-    expect(container.querySelectorAll("canvas")).toHaveLength(1);
-  });
-
-  it("stops rendering when the abort signal is already set", async () => {
-    vi.mocked(pdfjsMock.getDocument).mockReturnValue({
-      promise: Promise.resolve(makeMockPdf(3)),
-    } as ReturnType<typeof pdfjsMock.getDocument>);
-
+  it("does not render when the signal is already aborted", async () => {
     const controller = new AbortController();
     controller.abort();
 
-    const container = document.createElement("div");
-    await renderPdfPages(new ArrayBuffer(0), container, controller.signal);
+    const contentEl = document.createElement("div");
+    await mountPdfReader({
+      data: new ArrayBuffer(0),
+      contentEl,
+      signal: controller.signal,
+    });
 
-    expect(container.querySelectorAll("canvas")).toHaveLength(0);
+    expect(contentEl.querySelectorAll("canvas")).toHaveLength(0);
   });
 
   it("passes a copy of the buffer to getDocument, keeping the original usable", async () => {
     const buffer = new Uint8Array([1, 2, 3, 4]).buffer;
-    const container = document.createElement("div");
-    await renderPdfPages(buffer, container);
+    const contentEl = document.createElement("div");
+    await mountPdfReader({ data: buffer, contentEl });
 
     const passed = vi.mocked(pdfjsMock.getDocument).mock.lastCall![0] as {
       data: ArrayBuffer;
     };
     expect(passed.data).not.toBe(buffer);
     expect(new Uint8Array(passed.data)).toEqual(new Uint8Array([1, 2, 3, 4]));
+  });
+
+  it("destroy() destroys the pdf document", async () => {
+    const doc = mockDoc(2);
+    const contentEl = document.createElement("div");
+    const rendition = await mountPdfReader({
+      data: new ArrayBuffer(0),
+      contentEl,
+    });
+
+    rendition.destroy();
+
+    expect(doc.destroy).toHaveBeenCalled();
   });
 });

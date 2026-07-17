@@ -1,58 +1,178 @@
-export async function renderPdfPages(
-  arrayBuffer: ArrayBuffer,
-  container: HTMLElement,
-  signal?: AbortSignal,
-) {
+import type { ReaderNavState, ReaderRendition } from "./types";
+
+export type PdfMountOptions = {
+  data: ArrayBuffer;
+  contentEl: HTMLElement;
+  signal?: AbortSignal;
+  onNavChange?: (state: ReaderNavState) => void;
+};
+
+/**
+ * Shows one PDF page at a time, scaled to fit entirely inside the reading
+ * area (page mode). Rendered pages are cached and neighbors prefetched so
+ * page turns swap instantly; the cache resets when the area is resized.
+ */
+export async function mountPdfReader(
+  options: PdfMountOptions,
+): Promise<ReaderRendition> {
+  const { data, contentEl, signal, onNavChange } = options;
+
   const pdfjs = await import("pdfjs-dist");
-  pdfjs.GlobalWorkerOptions.workerSrc =
-    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  // Served from public/ (same pdfjs-dist build) so opening a book never
+  // waits on a CDN fetch.
+  pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.js";
 
   // pdf.js transfers `data` to its worker, detaching the buffer — pass a
   // copy so the caller's stored buffer survives re-opens and StrictMode
   // effect re-runs.
-  const pdf = await pdfjs.getDocument({ data: arrayBuffer.slice(0) }).promise;
+  const pdf = await pdfjs.getDocument({ data: data.slice(0) }).promise;
   const totalPages = pdf.numPages;
 
-  container.innerHTML = "";
+  const wrapper = document.createElement("div");
+  wrapper.className =
+    "pdf-page-wrapper overflow-hidden rounded-lg bg-white shadow-[0_2px_12px_rgba(0,0,0,0.08)]";
+  contentEl.innerHTML = "";
+  contentEl.appendChild(wrapper);
 
-  for (let n = 1; n <= totalPages; n++) {
-    if (signal?.aborted) return;
+  let current = 1;
+  let showSeq = 0;
+  let destroyed = false;
 
-    if (totalPages > 1) {
-      let prog = container.querySelector(
-        ".pdf-progress",
-      ) as HTMLParagraphElement | null;
-      if (!prog) {
-        prog = document.createElement("p");
-        prog.className =
-          "pdf-progress text-center text-[0.8rem] text-muted-foreground py-3 pb-6";
-        container.appendChild(prog);
-      }
-      prog.textContent = `Rendering page ${n} of ${totalPages}…`;
-    }
-
-    const page = await pdf.getPage(n);
-    const bodyWidth = Math.max(container.clientWidth - 48, 300);
-    const base = page.getViewport({ scale: 1 });
-    const scale = Math.min(1.8, bodyWidth / base.width);
-    const viewport = page.getViewport({ scale });
-
-    const canvas = document.createElement("canvas");
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-    await page.render({
-      canvasContext: canvas.getContext("2d")!,
-      viewport,
-    }).promise;
-
-    const wrapper = document.createElement("div");
-    wrapper.className =
-      "pdf-page-wrapper mx-auto mb-4 overflow-hidden rounded-lg bg-white shadow-[0_2px_12px_rgba(0,0,0,0.08)]";
-    wrapper.appendChild(canvas);
-
-    const prog = container.querySelector(".pdf-progress");
-    container.insertBefore(wrapper, prog);
+  function availableArea() {
+    const cs = getComputedStyle(contentEl);
+    const padX =
+      (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+    const padY =
+      (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+    return {
+      width: Math.max(contentEl.clientWidth - padX, 100),
+      height: Math.max(contentEl.clientHeight - padY, 100),
+    };
   }
 
-  container.querySelector(".pdf-progress")?.remove();
+  let cache = new Map<number, Promise<HTMLCanvasElement>>();
+  let cacheSize = "";
+
+  function invalidateIfResized() {
+    const avail = availableArea();
+    const key = `${avail.width}x${avail.height}`;
+    if (key !== cacheSize) {
+      cacheSize = key;
+      cache = new Map();
+    }
+    return avail;
+  }
+
+  function renderPage(
+    n: number,
+    avail: { width: number; height: number },
+  ): Promise<HTMLCanvasElement> {
+    const cached = cache.get(n);
+    if (cached) return cached;
+
+    const job = (async () => {
+      const page = await pdf.getPage(n);
+      const base = page.getViewport({ scale: 1 });
+      const scale = Math.min(
+        avail.width / base.width,
+        avail.height / base.height,
+      );
+      const viewport = page.getViewport({ scale });
+      // Render at device resolution but display at CSS size for crisp text
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.floor(viewport.width * dpr);
+      canvas.height = Math.floor(viewport.height * dpr);
+      canvas.style.width = `${Math.floor(viewport.width)}px`;
+      canvas.style.height = `${Math.floor(viewport.height)}px`;
+      canvas.style.display = "block";
+
+      await page.render({
+        canvasContext: canvas.getContext("2d")!,
+        viewport: page.getViewport({ scale: scale * dpr }),
+      }).promise;
+      return canvas;
+    })();
+
+    cache.set(n, job);
+    job.catch(() => cache.delete(n));
+    return job;
+  }
+
+  async function show(n: number) {
+    const seq = ++showSeq;
+    const avail = invalidateIfResized();
+
+    let canvas: HTMLCanvasElement;
+    try {
+      canvas = await renderPage(n, avail);
+    } catch {
+      return;
+    }
+    if (seq !== showSeq || destroyed || signal?.aborted) return;
+
+    wrapper.replaceChildren(canvas);
+    onNavChange?.({
+      canPrev: n > 1,
+      canNext: n < totalPages,
+      pageLabel: `Page ${n} of ${totalPages}`,
+    });
+
+    // Warm the pages a turn away in either direction
+    for (const m of [n + 1, n - 1]) {
+      if (m >= 1 && m <= totalPages) void renderPage(m, avail);
+    }
+  }
+
+  let resizeTimer: ReturnType<typeof setTimeout> | undefined;
+  const scheduleRefit = () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => void show(current), 150);
+  };
+  // ResizeObserver fires once on observe; skip that initial call so the
+  // first render isn't done twice. Absent in jsdom, hence the guard.
+  let observedOnce = false;
+  const observer =
+    typeof ResizeObserver !== "undefined"
+      ? new ResizeObserver(() => {
+          if (!observedOnce) {
+            observedOnce = true;
+            return;
+          }
+          scheduleRefit();
+        })
+      : null;
+  observer?.observe(contentEl);
+  window.addEventListener("resize", scheduleRefit);
+
+  await show(current);
+
+  return {
+    destroy() {
+      destroyed = true;
+      showSeq++;
+      observer?.disconnect();
+      window.removeEventListener("resize", scheduleRefit);
+      clearTimeout(resizeTimer);
+      void pdf.destroy();
+    },
+    prev: async () => {
+      if (current > 1) {
+        current--;
+        await show(current);
+      }
+    },
+    next: async () => {
+      if (current < totalPages) {
+        current++;
+        await show(current);
+      }
+    },
+    themes: {
+      fontSize() {
+        // PDF pages are rasterized; font size does not apply.
+      },
+    },
+  };
 }

@@ -5,12 +5,10 @@ import { ChevronLeft, List, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import type { LibraryBook } from "@/lib/books";
-import {
-  mountEpubReader,
-  type EpubNavState,
-  type EpubRendition,
-} from "@/lib/readers/epub-engine";
-import { renderPdfPages } from "@/lib/readers/pdf";
+import { mountEpubReader } from "@/lib/readers/epub-engine";
+import { mountPdfReader } from "@/lib/readers/pdf";
+import { mountTxtReader } from "@/lib/readers/txt";
+import type { ReaderNavState, ReaderRendition } from "@/lib/readers/types";
 import { cn } from "@/lib/utils";
 
 type BookReaderProps = {
@@ -21,7 +19,7 @@ type BookReaderProps = {
 export function BookReader({ book, onClose }: BookReaderProps) {
   const contentRef = useRef<HTMLDivElement>(null);
   const tocListRef = useRef<HTMLUListElement>(null);
-  const renditionRef = useRef<EpubRendition | null>(null);
+  const renditionRef = useRef<ReaderRendition | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const [fontSize, setFontSize] = useState(18);
@@ -30,7 +28,7 @@ export function BookReader({ book, onClose }: BookReaderProps) {
   const [tocOpen, setTocOpen] = useState(false);
   const [showEpubChrome, setShowEpubChrome] = useState(false);
   const [hasToc, setHasToc] = useState(false);
-  const [nav, setNav] = useState<EpubNavState>({
+  const [nav, setNav] = useState<ReaderNavState>({
     canPrev: false,
     canNext: false,
     pageLabel: "",
@@ -40,6 +38,8 @@ export function BookReader({ book, onClose }: BookReaderProps) {
     document.body.style.overflow = "hidden";
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
+      else if (e.key === "ArrowLeft") void renditionRef.current?.prev();
+      else if (e.key === "ArrowRight") void renditionRef.current?.next();
     };
     document.addEventListener("keydown", onKey);
     return () => {
@@ -75,17 +75,27 @@ export function BookReader({ book, onClose }: BookReaderProps) {
           if (typeof book.data !== "string") {
             throw new Error("Invalid text file data.");
           }
-          content.innerHTML = "";
-          const div = document.createElement("div");
-          div.className = "reader-txt";
-          div.style.fontSize = "18px";
-          div.textContent = book.data;
-          content.appendChild(div);
+          renditionRef.current = mountTxtReader({
+            text: book.data,
+            contentEl: content,
+            fontSize: 18,
+            onNavChange: setNav,
+          });
         } else if (book.ext === "pdf") {
           if (!(book.data instanceof ArrayBuffer)) {
             throw new Error("Invalid PDF data.");
           }
-          await renderPdfPages(book.data, content, abort.signal);
+          const rendition = await mountPdfReader({
+            data: book.data,
+            contentEl: content,
+            signal: abort.signal,
+            onNavChange: setNav,
+          });
+          if (abort.signal.aborted) {
+            rendition.destroy();
+            return;
+          }
+          renditionRef.current = rendition;
         } else if (book.ext === "epub") {
           if (!(book.data instanceof File)) {
             throw new Error("Invalid EPUB data.");
@@ -131,15 +141,8 @@ export function BookReader({ book, onClose }: BookReaderProps) {
   }, [book]);
 
   useEffect(() => {
-    if (!contentRef.current) return;
-    if (book.ext === "txt") {
-      const el = contentRef.current.querySelector(
-        ".reader-txt",
-      ) as HTMLElement | null;
-      if (el) el.style.fontSize = `${fontSize}px`;
-    } else if (book.ext === "epub" && renditionRef.current) {
-      renditionRef.current.themes.fontSize(`${fontSize}px`);
-    }
+    if (book.ext === "pdf") return;
+    renditionRef.current?.themes.fontSize(`${fontSize}px`);
   }, [fontSize, book.ext]);
 
   const adjustFont = (delta: number) => {
@@ -251,8 +254,9 @@ export function BookReader({ book, onClose }: BookReaderProps) {
           <div
             ref={contentRef}
             className={cn(
-              "reader-content min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-6",
-              book.ext === "txt" && "flex items-start justify-center",
+              "reader-content min-h-0 flex-1 overflow-hidden px-3 py-4 sm:px-6",
+              book.ext === "txt" && "flex justify-center",
+              book.ext === "pdf" && "flex items-center justify-center",
             )}
             tabIndex={0}
           />
@@ -275,13 +279,7 @@ export function BookReader({ book, onClose }: BookReaderProps) {
             </div>
           ) : null}
 
-          <div
-            className={cn(
-              "flex shrink-0 items-center justify-between gap-3 border-t border-border bg-white px-4 py-3",
-              !showEpubChrome && "hidden",
-            )}
-            aria-hidden={!showEpubChrome}
-          >
+          <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border bg-white px-4 py-3">
             <Button
               type="button"
               variant="outline"

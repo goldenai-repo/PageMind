@@ -176,6 +176,9 @@
 .reader-txt {
   max-width: 720px;
   width: 100%;
+  /* Page mode: fixed page the size of the reading area; text paginates inside */
+  height: 100%;
+  overflow: hidden;
   background: #fff;
   border-radius: 12px;
   box-shadow: 0 2px 18px rgba(0, 0, 0, 0.08);
