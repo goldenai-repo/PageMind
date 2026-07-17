@@ -7,7 +7,10 @@ export async function renderPdfPages(
   pdfjs.GlobalWorkerOptions.workerSrc =
     "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
-  const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+  // pdf.js transfers `data` to its worker, detaching the buffer — pass a
+  // copy so the caller's stored buffer survives re-opens and StrictMode
+  // effect re-runs.
+  const pdf = await pdfjs.getDocument({ data: arrayBuffer.slice(0) }).promise;
   const totalPages = pdf.numPages;
 
   container.innerHTML = "";

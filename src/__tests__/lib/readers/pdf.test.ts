@@ -92,13 +92,15 @@ describe("renderPdfPages", () => {
     expect(container.querySelectorAll("canvas")).toHaveLength(0);
   });
 
-  it("passes the array buffer data to getDocument", async () => {
-    const buffer = new ArrayBuffer(8);
+  it("passes a copy of the buffer to getDocument, keeping the original usable", async () => {
+    const buffer = new Uint8Array([1, 2, 3, 4]).buffer;
     const container = document.createElement("div");
     await renderPdfPages(buffer, container);
 
-    expect(vi.mocked(pdfjsMock.getDocument)).toHaveBeenCalledWith({
-      data: buffer,
-    });
+    const passed = vi.mocked(pdfjsMock.getDocument).mock.lastCall![0] as {
+      data: ArrayBuffer;
+    };
+    expect(passed.data).not.toBe(buffer);
+    expect(new Uint8Array(passed.data)).toEqual(new Uint8Array([1, 2, 3, 4]));
   });
 });
