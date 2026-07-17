@@ -154,7 +154,9 @@ export async function mountEpubReader(
   viewerEl.id = "epub-viewer";
   viewerEl.style.cssText = [
     "width:100%",
-    "min-height:600px",
+    // Page mode: the page fills the visible area and keeps that size;
+    // chapter text scrolls inside it.
+    "height:100%",
     "overflow-y:auto",
     "background:#fff",
     "padding:1.5rem 3rem",
