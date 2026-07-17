@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { BookOpen, Plus, Upload } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { BookOpen, Plus, Search, Upload } from "lucide-react";
 
 import { BookReader } from "@/components/book-reader";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   COVERS,
   formatDate,
@@ -19,9 +20,25 @@ function hasFiles(e: DragEvent | React.DragEvent) {
   return Array.from(e.dataTransfer?.types ?? []).includes("Files");
 }
 
+type SortKey = "recent" | "title";
+
 export function LibrarySection() {
   const [books, setBooks] = useState<LibraryBook[]>([]);
   const [currentBook, setCurrentBook] = useState<LibraryBook | null>(null);
+  const [query, setQuery] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("recent");
+
+  const visibleBooks = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const filtered = q
+      ? books.filter((b) => b.title.toLowerCase().includes(q))
+      : books;
+    return [...filtered].sort((a, b) =>
+      sortKey === "title"
+        ? a.title.localeCompare(b.title, undefined, { sensitivity: "base" })
+        : b.addedAt.getTime() - a.addedAt.getTime(),
+    );
+  }, [books, query, sortKey]);
 
   useEffect(() => {
     loadBooks().then(setBooks).catch(console.error);
@@ -79,13 +96,16 @@ export function LibrarySection() {
     [processFile],
   );
 
+  const openBook = (book: LibraryBook) => {
+    dragDepth.current = 0;
+    setDragActive(false);
+    setZoneActive(false);
+    setCurrentBook(book);
+  };
+
   useEffect(() => {
     // Skip window DnD while the reader is open.
-    if (currentBook) {
-      setDragActive(false);
-      dragDepth.current = 0;
-      return;
-    }
+    if (currentBook) return;
 
     const onDragEnter = (e: DragEvent) => {
       if (!hasFiles(e)) return;
@@ -175,9 +195,11 @@ export function LibrarySection() {
           <p className="mt-0.5 text-[0.85rem] text-muted-foreground">
             {books.length === 0
               ? "No books yet"
-              : books.length === 1
-                ? "1 book in your collection"
-                : `${books.length} books in your collection`}
+              : query.trim()
+                ? `${visibleBooks.length} of ${books.length} ${books.length === 1 ? "book" : "books"} match`
+                : books.length === 1
+                  ? "1 book in your collection"
+                  : `${books.length} books in your collection`}
           </p>
         </div>
         <Button
@@ -200,6 +222,39 @@ export function LibrarySection() {
           }}
         />
       </div>
+
+      {books.length > 0 ? (
+        <div className="mb-6 flex flex-wrap items-center gap-3">
+          <div className="relative min-w-52 flex-1 sm:max-w-xs">
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search books…"
+              aria-label="Search books by title"
+              className="h-10 rounded-[6px] bg-white pl-9"
+            />
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <label
+              htmlFor="library-sort"
+              className="text-[0.8rem] text-muted-foreground"
+            >
+              Sort by
+            </label>
+            <select
+              id="library-sort"
+              value={sortKey}
+              onChange={(e) => setSortKey(e.target.value as SortKey)}
+              className="h-10 rounded-[6px] border border-input bg-white px-3 text-[0.85rem] font-medium text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            >
+              <option value="recent">Recently added</option>
+              <option value="title">Title A–Z</option>
+            </select>
+          </div>
+        </div>
+      ) : null}
 
       {books.length === 0 ? (
         <div
@@ -234,19 +289,34 @@ export function LibrarySection() {
             Upload your first book
           </Button>
         </div>
+      ) : visibleBooks.length === 0 ? (
+        <div className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-border bg-white/60 px-4 py-14 text-center">
+          <p className="text-[0.95rem] font-semibold text-foreground">
+            No books match “{query.trim()}”
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setQuery("")}
+            className="rounded-[6px]"
+          >
+            Clear search
+          </Button>
+        </div>
       ) : (
         <div
           className="grid grid-cols-[repeat(auto-fill,minmax(176px,1fr))] gap-6"
           role="list"
           aria-label="Book collection"
         >
-          {books.map((book) => (
+          {visibleBooks.map((book) => (
             <button
               key={book.id}
               type="button"
               role="listitem"
               aria-label={`${book.title} — ${book.ext.toUpperCase()}`}
-              onClick={() => setCurrentBook(book)}
+              onClick={() => openBook(book)}
               className="group flex flex-col overflow-hidden rounded-xl bg-card text-left shadow-[0_2px_10px_rgba(27,54,93,0.07)] outline-none transition-all hover:-translate-y-1.5 hover:shadow-[0_12px_30px_rgba(27,54,93,0.15)] focus-visible:ring-3 focus-visible:ring-navy/25"
             >
               <div
