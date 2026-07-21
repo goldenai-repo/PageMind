@@ -1,0 +1,26 @@
+// PageMind: Firestore security rules for the `books` collection.
+//
+// Apply via Firebase Console → Firestore Database → Rules (paste and
+// publish), or `firebase deploy --only firestore:rules` if the project is
+// linked to the Firebase CLI locally.
+//
+// Each book document has a `userId` field set at creation time to the
+// uploader's auth.uid; these rules make sure only that user can ever
+// read, create, or delete it — mirrors the per-user isolation the
+// Supabase RLS policies enforced before this migration.
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /books/{bookId} {
+      allow read, delete: if request.auth != null
+        && request.auth.uid == resource.data.userId;
+
+      allow create: if request.auth != null
+        && request.auth.uid == request.resource.data.userId;
+
+      // No update rule: the app never edits a book after upload.
+    }
+  }
+}

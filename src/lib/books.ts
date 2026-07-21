@@ -18,7 +18,7 @@ export type LibraryBook = {
   cover: string;
   size: string;
   addedAt: Date;
-  /** Public URL of the file in the 'books' Storage bucket. */
+  /** Firebase Storage download URL for the file. */
   fileUrl: string;
   /**
    * File for EPUB; ArrayBuffer for PDF; string for TXT. Undefined until the
@@ -35,12 +35,6 @@ export function coverForId(id: string): string {
     hash = (hash * 31 + id.charCodeAt(i)) | 0;
   }
   return COVERS[Math.abs(hash) % COVERS.length];
-}
-
-/** The 'books' table has no dedicated ext column, so it's read off the file's URL. */
-export function extFromUrl(url: string): BookExt | null {
-  const ext = url.split(/[?#]/)[0].split(".").pop()?.toLowerCase();
-  return ext === "pdf" || ext === "epub" || ext === "txt" ? ext : null;
 }
 
 export function formatSize(bytes: number) {

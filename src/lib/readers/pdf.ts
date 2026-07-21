@@ -10,10 +10,14 @@ export async function renderPdfPageImages(
   signal?: AbortSignal,
 ): Promise<PdfPageImage[]> {
   const pdfjs = await import("pdfjs-dist");
-  pdfjs.GlobalWorkerOptions.workerSrc =
-    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  // Served from public/ (same pdfjs-dist build) so opening a book never
+  // waits on a CDN fetch.
+  pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.js";
 
-  const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+  // pdf.js transfers `data` to its worker, detaching the buffer — pass a
+  // copy so the caller's stored buffer survives re-opens and StrictMode
+  // effect re-runs.
+  const pdf = await pdfjs.getDocument({ data: arrayBuffer.slice(0) }).promise;
   const images: PdfPageImage[] = [];
 
   for (let n = 1; n <= pdf.numPages; n++) {

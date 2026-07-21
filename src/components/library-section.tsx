@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { BookOpen, Loader2, Plus, Upload } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { BookOpen, Loader2, Plus, Search, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 import { BookReader } from "@/components/book-reader";
 import { Button } from "@/components/ui/button";
-import { createClient } from "@/lib/supabase/client";
-import { downloadBookData, listBooks, uploadBook } from "@/lib/supabase/books";
+import { Input } from "@/components/ui/input";
+import { downloadBookData, listBooks, uploadBook } from "@/lib/firebase/books";
 import { formatDate, type BookExt, type LibraryBook } from "@/lib/books";
 import { cn } from "@/lib/utils";
 
@@ -15,48 +15,59 @@ function hasFiles(e: DragEvent | React.DragEvent) {
   return Array.from(e.dataTransfer?.types ?? []).includes("Files");
 }
 
-export function LibrarySection() {
-  const [supabase] = useState(createClient);
-  const [userId, setUserId] = useState<string | null>(null);
+type SortKey = "recent" | "title";
+
+type LibrarySectionProps = {
+  /** Firebase auth uid of the signed-in user, resolved server-side. */
+  userId: string;
+};
+
+export function LibrarySection({ userId }: LibrarySectionProps) {
   const [books, setBooks] = useState<LibraryBook[]>([]);
   const [libraryLoading, setLibraryLoading] = useState(true);
   const [uploadingCount, setUploadingCount] = useState(0);
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [currentBook, setCurrentBook] = useState<LibraryBook | null>(null);
+  const [query, setQuery] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("recent");
   const [dragActive, setDragActive] = useState(false);
   const [zoneActive, setZoneActive] = useState(false);
   const dragDepth = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load the signed-in user's own library from Supabase on mount.
+  const visibleBooks = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const filtered = q
+      ? books.filter((b) => b.title.toLowerCase().includes(q))
+      : books;
+    return [...filtered].sort((a, b) =>
+      sortKey === "title"
+        ? a.title.localeCompare(b.title, undefined, { sensitivity: "base" })
+        : b.addedAt.getTime() - a.addedAt.getTime(),
+    );
+  }, [books, query, sortKey]);
+
+  // Load the signed-in user's own library from Firestore on mount.
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      const { data, error } = await supabase.auth.getUser();
-      if (cancelled) return;
-      if (error || !data.user) {
-        toast.error("You're not signed in.");
-        setLibraryLoading(false);
-        return;
-      }
-      setUserId(data.user.id);
-      try {
-        const rows = await listBooks(supabase, data.user.id);
+    listBooks(userId)
+      .then((rows) => {
         if (!cancelled) setBooks(rows);
-      } catch (err) {
+      })
+      .catch((err: unknown) => {
         if (!cancelled) {
           toast.error("Could not load your library", {
             description: err instanceof Error ? err.message : "Please refresh.",
           });
         }
-      } finally {
+      })
+      .finally(() => {
         if (!cancelled) setLibraryLoading(false);
-      }
-    })();
+      });
     return () => {
       cancelled = true;
     };
-  }, [supabase]);
+  }, [userId]);
 
   const processFile = useCallback(
     async (file: File) => {
@@ -67,21 +78,11 @@ export function LibrarySection() {
         });
         return;
       }
-      if (!userId) {
-        toast.error("You must be signed in to upload books.");
-        return;
-      }
 
       setUploadingCount((n) => n + 1);
       try {
         const title = file.name.replace(/\.[^/.]+$/, "");
-        const book = await uploadBook(
-          supabase,
-          userId,
-          file,
-          ext as BookExt,
-          title,
-        );
+        const book = await uploadBook(userId, file, ext as BookExt, title);
         setBooks((prev) => [...prev, book]);
       } catch (err) {
         toast.error(`Could not upload "${file.name}"`, {
@@ -91,7 +92,7 @@ export function LibrarySection() {
         setUploadingCount((n) => n - 1);
       }
     },
-    [supabase, userId],
+    [userId],
   );
 
   const onFiles = useCallback(
@@ -101,32 +102,26 @@ export function LibrarySection() {
     [processFile],
   );
 
-  const openBook = useCallback(
-    async (book: LibraryBook) => {
-      setOpeningId(book.id);
-      try {
-        const data = await downloadBookData(supabase, book);
-        setCurrentBook({ ...book, data });
-      } catch (err) {
-        toast.error(`Could not open "${book.title}"`, {
-          description: err instanceof Error ? err.message : "Please try again.",
-        });
-      } finally {
-        setOpeningId(null);
-      }
-    },
-    [supabase],
-  );
+  const openBook = useCallback(async (book: LibraryBook) => {
+    dragDepth.current = 0;
+    setDragActive(false);
+    setZoneActive(false);
+    setOpeningId(book.id);
+    try {
+      const data = await downloadBookData(book);
+      setCurrentBook({ ...book, data });
+    } catch (err) {
+      toast.error(`Could not open "${book.title}"`, {
+        description: err instanceof Error ? err.message : "Please try again.",
+      });
+    } finally {
+      setOpeningId(null);
+    }
+  }, []);
 
   useEffect(() => {
-    // Skip window DnD while the reader is open. `dragActive` itself is left
-    // alone here (see its render usage below, gated on `!currentBook`) —
-    // calling setState synchronously in an effect body triggers an extra
-    // cascading render, which react-hooks/set-state-in-effect flags.
-    if (currentBook) {
-      dragDepth.current = 0;
-      return;
-    }
+    // Skip window DnD while the reader is open.
+    if (currentBook) return;
 
     const onDragEnter = (e: DragEvent) => {
       if (!hasFiles(e)) return;
@@ -218,9 +213,11 @@ export function LibrarySection() {
               ? "Loading your library…"
               : books.length === 0
                 ? "No books yet"
-                : books.length === 1
-                  ? "1 book in your collection"
-                  : `${books.length} books in your collection`}
+                : query.trim()
+                  ? `${visibleBooks.length} of ${books.length} ${books.length === 1 ? "book" : "books"} match`
+                  : books.length === 1
+                    ? "1 book in your collection"
+                    : `${books.length} books in your collection`}
             {uploadingCount > 0
               ? ` · Uploading ${uploadingCount === 1 ? "1 file" : `${uploadingCount} files`}…`
               : null}
@@ -229,7 +226,6 @@ export function LibrarySection() {
         <Button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          disabled={!userId}
           className="h-[42px] rounded-[6px] px-5 font-semibold shadow-[0_3px_12px_rgba(27,54,93,0.3)] hover:-translate-y-px"
         >
           <Plus className="size-4" />
@@ -247,6 +243,39 @@ export function LibrarySection() {
           }}
         />
       </div>
+
+      {books.length > 0 ? (
+        <div className="mb-6 flex flex-wrap items-center gap-3">
+          <div className="relative min-w-52 flex-1 sm:max-w-xs">
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search books…"
+              aria-label="Search books by title"
+              className="h-10 rounded-[6px] bg-white pl-9"
+            />
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <label
+              htmlFor="library-sort"
+              className="text-[0.8rem] text-muted-foreground"
+            >
+              Sort by
+            </label>
+            <select
+              id="library-sort"
+              value={sortKey}
+              onChange={(e) => setSortKey(e.target.value as SortKey)}
+              className="h-10 rounded-[6px] border border-input bg-white px-3 text-[0.85rem] font-medium text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            >
+              <option value="recent">Recently added</option>
+              <option value="title">Title A–Z</option>
+            </select>
+          </div>
+        </div>
+      ) : null}
 
       {libraryLoading ? (
         <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground">
@@ -286,13 +315,28 @@ export function LibrarySection() {
             Upload your first book
           </Button>
         </div>
+      ) : visibleBooks.length === 0 ? (
+        <div className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-border bg-white/60 px-4 py-14 text-center">
+          <p className="text-[0.95rem] font-semibold text-foreground">
+            No books match &ldquo;{query.trim()}&rdquo;
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setQuery("")}
+            className="rounded-[6px]"
+          >
+            Clear search
+          </Button>
+        </div>
       ) : (
         <div
           className="grid grid-cols-[repeat(auto-fill,minmax(176px,1fr))] gap-6"
           role="list"
           aria-label="Book collection"
         >
-          {books.map((book) => (
+          {visibleBooks.map((book) => (
             <button
               key={book.id}
               type="button"

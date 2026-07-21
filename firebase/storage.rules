@@ -1,0 +1,22 @@
+// PageMind: Storage security rules for the `books/` folder.
+//
+// Apply via Firebase Console → Storage → Rules (paste and publish), or
+// `firebase deploy --only storage` if the project is linked to the
+// Firebase CLI locally.
+//
+// Files are uploaded to books/<uid>/<bookId>.<ext> (see uploadBook() in
+// src/lib/firebase/books.ts); these rules key off that <uid> path segment
+// matching the caller's auth.uid, so one user's files are never readable
+// or writable by another — mirrors the folder-scoped Supabase Storage
+// policies enforced before this migration.
+
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /books/{userId}/{fileName} {
+      allow read, write, delete: if request.auth != null
+        && request.auth.uid == userId;
+    }
+  }
+}

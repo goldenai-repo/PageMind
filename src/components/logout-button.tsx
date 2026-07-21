@@ -1,16 +1,18 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { signOut } from "firebase/auth";
 
 import { Button } from "@/components/ui/button";
-import { createClient } from "@/lib/supabase/client";
+import { clearSession } from "@/lib/firebase/auth-client";
+import { getFirebaseAuth } from "@/lib/firebase/client";
 
 export function LogoutButton() {
   const router = useRouter();
 
   const logout = async () => {
-    const supabase = createClient();
-    await supabase.auth.signOut();
+    await clearSession();
+    await signOut(getFirebaseAuth());
     router.push("/auth/login");
     router.refresh();
   };

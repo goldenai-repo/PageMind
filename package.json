@@ -6,14 +6,16 @@
     "dev": "doppler run -- next dev",
     "build": "doppler run -- next build",
     "start": "doppler run -- next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
-    "@supabase/ssr": "^0.12.2",
-    "@supabase/supabase-js": "^2.110.5",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "firebase": "^12.16.0",
+    "firebase-admin": "^13.10.0",
     "jszip": "^3.10.1",
     "lucide-react": "^1.24.0",
     "next": "16.2.10",
@@ -35,8 +37,10 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
+    "jsdom": "^29.1.1",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.10"
   },
   "ignoreScripts": [
     "sharp",

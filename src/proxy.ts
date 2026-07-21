@@ -1,6 +1,6 @@
 import { type NextRequest } from "next/server";
 
-import { updateSession } from "@/lib/supabase/middleware";
+import { updateSession } from "@/lib/firebase/middleware";
 
 export async function proxy(request: NextRequest) {
   return await updateSession(request);
@@ -15,6 +15,6 @@ export const config = {
      * - favicon.ico (favicon file)
      * - common image extensions
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|js)$).*)",
   ],
 };

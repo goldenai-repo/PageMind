@@ -4,31 +4,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Eye, EyeOff, Lock, Mail, Shield } from "lucide-react";
+import { createUserWithEmailAndPassword, sendEmailVerification } from "firebase/auth";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
+import { establishSession } from "@/lib/firebase/auth-client";
+import { getFirebaseAuth } from "@/lib/firebase/client";
+import { scorePassword, STRENGTH } from "@/lib/password";
 import { cn } from "@/lib/utils";
-
-function scorePassword(pw: string) {
-  if (!pw) return 0;
-  let score = 0;
-  if (pw.length >= 8) score++;
-  if (pw.length >= 12) score++;
-  if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) score++;
-  if (/[0-9]/.test(pw)) score++;
-  if (/[^A-Za-z0-9]/.test(pw)) score++;
-  return Math.min(4, Math.max(1, Math.ceil(score / 1.25)));
-}
-
-const STRENGTH = [
-  { label: "", color: "transparent", width: "0%" },
-  { label: "Weak", color: "#d94f4f", width: "25%" },
-  { label: "Fair", color: "#e68a2e", width: "50%" },
-  { label: "Good", color: "#b8c62b", width: "75%" },
-  { label: "Strong", color: "#27a96c", width: "100%" },
-] as const;
 
 export function SignUpForm({
   className,
@@ -46,7 +30,7 @@ export function SignUpForm({
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    const supabase = createClient();
+    const auth = getFirebaseAuth();
     setIsLoading(true);
     setError(null);
 
@@ -57,14 +41,9 @@ export function SignUpForm({
     }
 
     try {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/dashboard`,
-        },
-      });
-      if (error) throw error;
+      const { user } = await createUserWithEmailAndPassword(auth, email, password);
+      await sendEmailVerification(user);
+      await establishSession();
       router.push("/auth/sign-up-success");
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");
