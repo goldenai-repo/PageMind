@@ -1,14 +1,18 @@
 import type { LibraryBook } from "./books";
 
-const DB_NAME = "pagemind";
+const DB_PREFIX = "pagemind";
 const DB_VERSION = 1;
 const STORE = "books";
 
 type StoredBook = Omit<LibraryBook, "addedAt"> & { addedAt: string };
 
-function openDB(): Promise<IDBDatabase> {
+function dbName(userId: string) {
+  return `${DB_PREFIX}_${userId}`;
+}
+
+function openDB(userId: string): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    const req = indexedDB.open(dbName(userId), DB_VERSION);
     req.onupgradeneeded = () => {
       req.result.createObjectStore(STORE, { keyPath: "id" });
     };
@@ -17,8 +21,8 @@ function openDB(): Promise<IDBDatabase> {
   });
 }
 
-export async function loadBooks(): Promise<LibraryBook[]> {
-  const db = await openDB();
+export async function loadBooks(userId: string): Promise<LibraryBook[]> {
+  const db = await openDB(userId);
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, "readonly");
     const req = tx.objectStore(STORE).getAll();
@@ -34,8 +38,11 @@ export async function loadBooks(): Promise<LibraryBook[]> {
   });
 }
 
-export async function saveBook(book: LibraryBook): Promise<void> {
-  const db = await openDB();
+export async function saveBook(
+  userId: string,
+  book: LibraryBook,
+): Promise<void> {
+  const db = await openDB(userId);
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, "readwrite");
     const stored: StoredBook = { ...book, addedAt: book.addedAt.toISOString() };
@@ -45,8 +52,8 @@ export async function saveBook(book: LibraryBook): Promise<void> {
   });
 }
 
-export async function deleteBook(id: string): Promise<void> {
-  const db = await openDB();
+export async function deleteBook(userId: string, id: string): Promise<void> {
+  const db = await openDB(userId);
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, "readwrite");
     const req = tx.objectStore(STORE).delete(id);

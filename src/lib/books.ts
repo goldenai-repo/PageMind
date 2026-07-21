@@ -11,6 +11,9 @@ export const COVERS = [
 
 export type BookExt = "pdf" | "epub" | "txt";
 
+/** Shelf filter used by the library sidebar */
+export type BookStatus = "want" | "finished";
+
 export type LibraryBook = {
   id: string;
   title: string;
@@ -20,6 +23,8 @@ export type LibraryBook = {
   addedAt: Date;
   /** File for EPUB; ArrayBuffer for PDF; string for TXT */
   data: File | ArrayBuffer | string;
+  /** Defaults to "want" for newly uploaded books */
+  status?: BookStatus;
 };
 
 export function formatSize(bytes: number) {
