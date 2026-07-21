@@ -4,11 +4,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Eye, EyeOff, Lock, Mail, Shield } from "lucide-react";
+import { createUserWithEmailAndPassword, sendEmailVerification } from "firebase/auth";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
+import { establishSession } from "@/lib/firebase/auth-client";
+import { getFirebaseAuth } from "@/lib/firebase/client";
 import { scorePassword, STRENGTH } from "@/lib/password";
 import { cn } from "@/lib/utils";
 
@@ -28,7 +30,7 @@ export function SignUpForm({
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    const supabase = createClient();
+    const auth = getFirebaseAuth();
     setIsLoading(true);
     setError(null);
 
@@ -39,14 +41,9 @@ export function SignUpForm({
     }
 
     try {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/dashboard`,
-        },
-      });
-      if (error) throw error;
+      const { user } = await createUserWithEmailAndPassword(auth, email, password);
+      await sendEmailVerification(user);
+      await establishSession();
       router.push("/auth/sign-up-success");
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");

@@ -26,10 +26,10 @@ export default function Page() {
           Your account has been created successfully. Welcome to PageMind.
         </p>
         <Link
-          href="/auth/login"
+          href="/dashboard"
           className="inline-flex h-12 w-full items-center justify-center rounded-[6px] bg-primary text-[0.93rem] font-semibold text-primary-foreground shadow-[var(--shadow-btn)] transition hover:bg-navy-light hover:-translate-y-px"
         >
-          Go to Sign In
+          Go to Dashboard
         </Link>
       </div>
     </AuthShell>
