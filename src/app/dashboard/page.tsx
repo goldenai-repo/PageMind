@@ -1,18 +1,17 @@
 import { BrandMark } from "@/components/brand-mark";
 import { LibrarySection } from "@/components/library-section";
 import { LogoutButton } from "@/components/logout-button";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/firebase/auth-server";
 import { redirect } from "next/navigation";
 
 export default async function DashboardPage() {
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.getClaims();
+  const user = await getCurrentUser();
 
-  if (error || !data?.claims) {
+  if (!user) {
     redirect("/auth/login");
   }
 
-  const email = typeof data.claims.email === "string" ? data.claims.email : "";
+  const email = user.email ?? "";
   const displayName = email.includes("@") ? email.split("@")[0] : email || "Reader";
   const initial = (email.charAt(0) || "P").toUpperCase();
 

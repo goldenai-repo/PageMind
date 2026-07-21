@@ -3,8 +3,14 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
+import { establishSession } from "@/lib/firebase/auth-client";
+import { getFirebaseAuth } from "@/lib/firebase/client";
 import { cn } from "@/lib/utils";
+import {
+  GoogleAuthProvider,
+  signInWithEmailAndPassword,
+  signInWithPopup,
+} from "firebase/auth";
 import { Eye, EyeOff, Lock, Mail } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -23,16 +29,13 @@ export function LoginForm({
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const supabase = createClient();
+    const auth = getFirebaseAuth();
     setIsLoading(true);
     setError(null);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-      if (error) throw error;
+      await signInWithEmailAndPassword(auth, email, password);
+      await establishSession();
       router.push("/dashboard");
       router.refresh();
     } catch (error: unknown) {
@@ -43,19 +46,15 @@ export function LoginForm({
   };
 
   const handleGoogleLogin = async () => {
-    const supabase = createClient();
+    const auth = getFirebaseAuth();
     setIsLoading(true);
     setError(null);
 
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
-        },
-      });
-      if (error) throw error;
-      // Browser will redirect to Google; no need to clear loading here.
+      await signInWithPopup(auth, new GoogleAuthProvider());
+      await establishSession();
+      router.push("/dashboard");
+      router.refresh();
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");
       setIsLoading(false);
