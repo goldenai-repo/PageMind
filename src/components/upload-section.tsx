@@ -77,7 +77,6 @@ export function UploadSection({ userId }: { userId: string }) {
           cover: COVERS[booksRef.current.length % COVERS.length],
           size: formatSize(file.size),
           addedAt: new Date(),
-          status: "want",
         };
         setBooks((prev) => [...prev, book]);
         void saveBook(userId, book);

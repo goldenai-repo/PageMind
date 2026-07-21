@@ -7,6 +7,8 @@ import {
   BookOpen,
   CheckCircle2,
   Library,
+  Star,
+  Store,
   Upload,
 } from "lucide-react";
 
@@ -25,8 +27,28 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar";
 
-const shelves = [
-  { title: "All", href: "/library", shelf: "all", icon: Library },
+const bookStore = [
+  {
+    title: "All Books",
+    href: "/library",
+    shelf: "store",
+    icon: Store,
+  },
+] as const;
+
+const myLibrary = [
+  {
+    title: "My Books",
+    href: "/library?shelf=mine",
+    shelf: "mine",
+    icon: Library,
+  },
+  {
+    title: "Favorite",
+    href: "/library?shelf=favorite",
+    shelf: "favorite",
+    icon: Star,
+  },
   {
     title: "Want to Read",
     href: "/library?shelf=want",
@@ -49,7 +71,7 @@ export function AppSidebar({
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const activeShelf = searchParams.get("shelf") ?? "all";
+  const activeShelf = searchParams.get("shelf") ?? "store";
   const onLibrary = pathname.startsWith("/library");
   const onUpload = pathname.startsWith("/upload");
 
@@ -81,10 +103,30 @@ export function AppSidebar({
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Library</SidebarGroupLabel>
+          <SidebarGroupLabel>Book Store</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {shelves.map((item) => (
+              {bookStore.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton
+                    tooltip={item.title}
+                    isActive={onLibrary && activeShelf === item.shelf}
+                    render={<Link href={item.href} />}
+                  >
+                    <item.icon />
+                    <span>{item.title}</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>My Library</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {myLibrary.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     tooltip={item.title}

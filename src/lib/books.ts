@@ -11,8 +11,15 @@ export const COVERS = [
 
 export type BookExt = "pdf" | "epub" | "txt";
 
-/** Shelf filter used by the library sidebar */
+/** Reading shelf inside My Library */
 export type BookStatus = "want" | "finished";
+
+/**
+ * Sidebar filters:
+ * - store: Book Store → All Books (every uploaded book)
+ * - mine / favorite / want / finished: My Library shelves
+ */
+export type LibraryShelf = "store" | "mine" | "favorite" | BookStatus;
 
 export type LibraryBook = {
   id: string;
@@ -23,8 +30,11 @@ export type LibraryBook = {
   addedAt: Date;
   /** File for EPUB; ArrayBuffer for PDF; string for TXT */
   data: File | ArrayBuffer | string;
-  /** Defaults to "want" for newly uploaded books */
+  /** In the user's personal library (My Books) */
+  inMyLibrary?: boolean;
+  /** Reading status within My Library */
   status?: BookStatus;
+  favorite?: boolean;
 };
 
 export function formatSize(bytes: number) {
