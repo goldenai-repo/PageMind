@@ -1,18 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { BookOpen, MoreHorizontal } from "lucide-react";
 
 import { BookReader } from "@/components/book-reader";
-import { buttonVariants } from "@/components/ui/button";
 import {
   formatDate,
   type BookStatus,
   type LibraryBook,
 } from "@/lib/books";
 import { loadBooks, saveBook } from "@/lib/storage";
-import { cn } from "@/lib/utils";
 
 function bookStatus(book: LibraryBook): BookStatus {
   return book.status ?? "want";
@@ -63,29 +60,13 @@ export function LibrarySection({
 
   if (visibleBooks.length === 0) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-3.5 rounded-xl border border-dashed border-border bg-card/60 px-4 py-20 text-center">
-        <div className="mb-1 flex size-16 items-center justify-center rounded-2xl bg-muted text-navy/40">
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 py-20 text-center">
+        <div className="flex size-16 items-center justify-center rounded-2xl bg-muted text-navy/40">
           <BookOpen className="size-8" />
         </div>
         <p className="text-[1.1rem] font-semibold text-foreground">
           {shelf === "all" ? "Your library is empty" : "No books on this shelf"}
         </p>
-        <p className="max-w-80 text-[0.87rem] leading-relaxed text-muted-foreground">
-          {shelf === "all"
-            ? "Upload a PDF, EPUB, or TXT to get started."
-            : "Move books here from All using the menu on each cover."}
-        </p>
-        {shelf === "all" ? (
-          <Link
-            href="/upload"
-            className={cn(
-              buttonVariants(),
-              "mt-2 h-10 rounded-[6px] px-6 font-semibold shadow-[0_3px_12px_rgba(27,54,93,0.28)]",
-            )}
-          >
-            Go to upload
-          </Link>
-        ) : null}
       </div>
     );
   }
