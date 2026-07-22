@@ -1,15 +1,43 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { ChevronLeft, List, X } from "lucide-react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  BookOpen,
+  ChevronLeft,
+  Columns2,
+  List,
+  ScrollText,
+  X,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import type { LibraryBook } from "@/lib/books";
 import { mountEpubReader } from "@/lib/readers/epub-engine";
 import { mountPdfReader } from "@/lib/readers/pdf";
+import {
+  getReaderModeServerSnapshot,
+  getReaderModeSnapshot,
+  setReaderMode,
+  subscribeReaderMode,
+  type ReaderMode,
+} from "@/lib/readers/reader-mode";
 import { mountTxtReader } from "@/lib/readers/txt";
-import type { ReaderNavState, ReaderRendition } from "@/lib/readers/types";
+import type {
+  ReaderNavState,
+  ReaderRendition,
+  ReaderTocItem,
+} from "@/lib/readers/types";
 import { cn } from "@/lib/utils";
+
+const READER_MODE_OPTIONS: {
+  value: ReaderMode;
+  label: string;
+  icon: typeof BookOpen;
+}[] = [
+  { value: "flip", label: "Single page", icon: BookOpen },
+  { value: "scroll", label: "Continuous scroll", icon: ScrollText },
+  { value: "spread", label: "Two-page spread", icon: Columns2 },
+];
 
 type BookReaderProps = {
   book: LibraryBook;
@@ -18,7 +46,6 @@ type BookReaderProps = {
 
 export function BookReader({ book, onClose }: BookReaderProps) {
   const contentRef = useRef<HTMLDivElement>(null);
-  const tocListRef = useRef<HTMLUListElement>(null);
   const renditionRef = useRef<ReaderRendition | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -26,13 +53,30 @@ export function BookReader({ book, onClose }: BookReaderProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tocOpen, setTocOpen] = useState(false);
-  const [showEpubChrome, setShowEpubChrome] = useState(false);
-  const [hasToc, setHasToc] = useState(false);
+  const [toc, setToc] = useState<ReaderTocItem[]>([]);
+  const [activeTocId, setActiveTocId] = useState<string | null>(null);
+  // Persisted reader mode via an external store: SSR-safe (no hydration
+  // mismatch) and no setState-in-effect.
+  const mode = useSyncExternalStore(
+    subscribeReaderMode,
+    getReaderModeSnapshot,
+    getReaderModeServerSnapshot,
+  );
+  const modeRef = useRef<ReaderMode>(mode);
   const [nav, setNav] = useState<ReaderNavState>({
     canPrev: false,
     canNext: false,
     pageLabel: "",
   });
+
+  const reflowable = book.ext === "txt" || book.ext === "epub";
+
+  // Keep the ref current and apply mode changes to the live reader. Declared
+  // before the engine-mount effect so the reader mounts in the saved mode.
+  useEffect(() => {
+    modeRef.current = mode;
+    void renditionRef.current?.setMode?.(mode);
+  }, [mode]);
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -61,13 +105,23 @@ export function BookReader({ book, onClose }: BookReaderProps) {
 
     setLoading(true);
     setError(null);
-    setShowEpubChrome(false);
-    setHasToc(false);
+    setToc([]);
+    setActiveTocId(null);
     setTocOpen(false);
     setFontSize(18);
     setNav({ canPrev: false, canNext: false, pageLabel: "" });
     content.innerHTML = "";
     content.classList.remove("is-epub");
+
+    const handleToc = (items: ReaderTocItem[]) => {
+      if (abort.signal.aborted) return;
+      setToc(items);
+      setTocOpen(items.length > 0);
+    };
+    const handleTocActive = (id: string | null) => {
+      if (abort.signal.aborted) return;
+      setActiveTocId(id);
+    };
 
     const run = async () => {
       try {
@@ -79,7 +133,10 @@ export function BookReader({ book, onClose }: BookReaderProps) {
             text: book.data,
             contentEl: content,
             fontSize: 18,
+            mode: modeRef.current,
             onNavChange: setNav,
+            onToc: handleToc,
+            onTocActive: handleTocActive,
           });
         } else if (book.ext === "pdf") {
           if (!(book.data instanceof ArrayBuffer)) {
@@ -90,6 +147,8 @@ export function BookReader({ book, onClose }: BookReaderProps) {
             contentEl: content,
             signal: abort.signal,
             onNavChange: setNav,
+            onToc: handleToc,
+            onTocActive: handleTocActive,
           });
           if (abort.signal.aborted) {
             rendition.destroy();
@@ -100,20 +159,14 @@ export function BookReader({ book, onClose }: BookReaderProps) {
           if (!(book.data instanceof File)) {
             throw new Error("Invalid EPUB data.");
           }
-          const tocList = tocListRef.current;
-          if (!tocList) throw new Error("Reader controls not ready.");
-
-          setShowEpubChrome(true);
           const rendition = await mountEpubReader({
             file: book.data,
             contentEl: content,
-            tocListEl: tocList,
             fontSize: 18,
-            onTocVisibility: (visible) => {
-              setHasToc(visible);
-              setTocOpen(visible);
-            },
+            mode: modeRef.current,
             onNavChange: setNav,
+            onToc: handleToc,
+            onTocActive: handleTocActive,
           });
           if (abort.signal.aborted) {
             rendition.destroy();
@@ -145,9 +198,25 @@ export function BookReader({ book, onClose }: BookReaderProps) {
     renditionRef.current?.themes.fontSize(`${fontSize}px`);
   }, [fontSize, book.ext]);
 
+  // Keep the active sidebar entry in view as the reader moves.
+  useEffect(() => {
+    if (!activeTocId) return;
+    document
+      .querySelector(`[data-toc-id="${CSS.escape(activeTocId)}"]`)
+      ?.scrollIntoView({ block: "nearest" });
+  }, [activeTocId]);
+
   const adjustFont = (delta: number) => {
     setFontSize((n) => Math.min(32, Math.max(12, n + delta)));
   };
+
+  const changeMode = (next: ReaderMode) => {
+    if (next === mode) return;
+    // Updates the store → re-render → the [mode] effect applies it.
+    setReaderMode(next);
+  };
+
+  const hasToc = toc.length > 0;
 
   return (
     <div
@@ -174,22 +243,42 @@ export function BookReader({ book, onClose }: BookReaderProps) {
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
-          {showEpubChrome ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="icon-sm"
-              title="Toggle contents"
-              onClick={() => setTocOpen((v) => !v)}
-              className={cn(
-                "rounded-md border-border bg-[#f0f2f5]",
-                !hasToc && "invisible",
-              )}
-            >
-              <List className="size-3.5" />
-            </Button>
-          ) : null}
-          {(book.ext === "txt" || book.ext === "epub") && (
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            title="Toggle contents"
+            onClick={() => setTocOpen((v) => !v)}
+            className={cn(
+              "rounded-md border-border bg-[#f0f2f5]",
+              !hasToc && "invisible",
+            )}
+          >
+            <List className="size-3.5" />
+          </Button>
+          {reflowable && (
+            <div className="mr-1 flex items-center gap-0.5 rounded-md border border-border bg-[#f0f2f5] p-0.5">
+              {READER_MODE_OPTIONS.map(({ value, label, icon: Icon }) => (
+                <button
+                  key={value}
+                  type="button"
+                  title={label}
+                  aria-label={label}
+                  aria-pressed={mode === value}
+                  onClick={() => changeMode(value)}
+                  className={cn(
+                    "flex h-[26px] w-[30px] items-center justify-center rounded-[5px] transition-colors",
+                    mode === value
+                      ? "bg-white text-navy shadow-sm"
+                      : "text-muted-foreground hover:text-navy",
+                  )}
+                >
+                  <Icon className="size-3.5" />
+                </button>
+              ))}
+            </div>
+          )}
+          {reflowable && (
             <>
               <div className="mx-1 h-[18px] w-px bg-border" />
               <Button
@@ -224,9 +313,7 @@ export function BookReader({ book, onClose }: BookReaderProps) {
         <aside
           className={cn(
             "flex shrink-0 flex-col overflow-hidden border-r border-border bg-[#f5f7fb] transition-[width] duration-200",
-            showEpubChrome && tocOpen && hasToc
-              ? "w-[272px]"
-              : "w-0 border-r-0",
+            tocOpen && hasToc ? "w-[272px]" : "w-0 border-r-0",
           )}
           aria-label="Table of contents"
         >
@@ -243,11 +330,26 @@ export function BookReader({ book, onClose }: BookReaderProps) {
               <X className="size-3.5" />
             </Button>
           </div>
-          <ul
-            ref={tocListRef}
-            className="toc-list m-0 flex-1 list-none overflow-y-auto p-2"
-            role="tree"
-          />
+          <ul className="toc-list m-0 flex-1 list-none overflow-y-auto p-2" role="tree">
+            {toc.map((item) => (
+              <li key={item.id} className="toc-item" role="none">
+                <button
+                  type="button"
+                  role="treeitem"
+                  aria-selected={activeTocId === item.id}
+                  data-toc-id={item.id}
+                  title={item.label}
+                  onClick={() => void renditionRef.current?.goToTocItem?.(item.id)}
+                  className={cn(
+                    "toc-link",
+                    activeTocId === item.id && "active",
+                  )}
+                >
+                  {item.label}
+                </button>
+              </li>
+            ))}
+          </ul>
         </aside>
 
         <div className="relative flex min-w-0 flex-1 flex-col">
@@ -255,7 +357,6 @@ export function BookReader({ book, onClose }: BookReaderProps) {
             ref={contentRef}
             className={cn(
               "reader-content min-h-0 flex-1 overflow-hidden px-3 py-4 sm:px-6",
-              book.ext === "txt" && "flex justify-center",
               book.ext === "pdf" && "flex items-center justify-center",
             )}
             tabIndex={0}

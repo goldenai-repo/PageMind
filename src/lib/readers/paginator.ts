@@ -17,16 +17,20 @@ export type PaginatorOptions = {
   pager: HTMLElement;
   /** Horizontal space between page columns, px. */
   gap?: number;
+  /** Columns visible per turn: 1 (single page) or 2 (side-by-side spread). */
+  columnsPerPage?: number;
   onPageChange?: (page: number, pageCount: number) => void;
 };
 
 /**
- * Paginates flowed content with CSS columns: each page is a column exactly
- * as wide as the viewport, and turning a page slides the scroll offset by
- * one column stride. Content never scrolls vertically.
+ * Paginates flowed content with CSS columns: each page shows `columnsPerPage`
+ * columns and turning a page slides the scroll offset by that many columns.
+ * With one column per page this is a single-page reader; with two it's an
+ * open-book spread. Content never scrolls vertically.
  */
 export function createPaginator(options: PaginatorOptions): Paginator {
   const { viewport, pager, gap = 48, onPageChange } = options;
+  const cpp = Math.max(1, options.columnsPerPage ?? 1);
 
   viewport.style.height = "100%";
   viewport.style.overflow = "hidden";
@@ -37,15 +41,21 @@ export function createPaginator(options: PaginatorOptions): Paginator {
   let page = 0;
   let pageCount = 1;
 
+  // Width of a single text column given how many share the viewport.
+  const columnWidth = () =>
+    Math.max(1, (viewport.clientWidth - (cpp - 1) * gap) / cpp);
+  // A page turn advances by a full viewport width (cpp columns + gaps).
   const stride = () => viewport.clientWidth + gap;
 
   function measure() {
-    pager.style.columnWidth = `${viewport.clientWidth}px`;
-    // scrollWidth = pages * width + (pages - 1) * gap
-    pageCount = Math.max(
+    pager.style.columnWidth = `${columnWidth()}px`;
+    const colStride = columnWidth() + gap;
+    // scrollWidth = totalColumns * colWidth + (totalColumns - 1) * gap
+    const totalColumns = Math.max(
       1,
-      Math.round((viewport.scrollWidth + gap) / stride()),
+      Math.round((viewport.scrollWidth + gap) / colStride),
     );
+    pageCount = Math.max(1, Math.ceil(totalColumns / cpp));
   }
 
   function apply() {
@@ -96,9 +106,11 @@ export function createPaginator(options: PaginatorOptions): Paginator {
         el.getBoundingClientRect().left -
         viewport.getBoundingClientRect().left +
         viewport.scrollLeft;
+      const colStride = columnWidth() + gap;
+      const columnIndex = Math.floor((offset + gap / 2) / colStride);
       return Math.max(
         0,
-        Math.min(pageCount - 1, Math.floor((offset + gap / 2) / stride())),
+        Math.min(pageCount - 1, Math.floor(columnIndex / cpp)),
       );
     },
     reset,

@@ -1,11 +1,19 @@
-import { createPaginator } from "./paginator";
-import type { ReaderNavState, ReaderRendition } from "./types";
+import { createFlowReader } from "./flow-reader";
+import type { ReaderMode } from "./reader-mode";
+import type {
+  ReaderNavState,
+  ReaderRendition,
+  ReaderTocItem,
+} from "./types";
 
 export type TxtMountOptions = {
   text: string;
   contentEl: HTMLElement;
   fontSize: number;
+  mode?: ReaderMode;
   onNavChange?: (state: ReaderNavState) => void;
+  onToc?: (items: ReaderTocItem[]) => void;
+  onTocActive?: (id: string | null) => void;
   /** Max characters laid out at once; larger texts split at paragraph breaks. */
   sectionSize?: number;
 };
@@ -39,71 +47,76 @@ export function splitIntoSections(
   return sections;
 }
 
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+/** First non-empty line of a section, trimmed for use as a sidebar label. */
+function sectionLabel(section: string, idx: number): string {
+  const firstLine = section
+    .split("\n")
+    .map((l) => l.trim())
+    .find((l) => l.length > 0);
+  if (firstLine) {
+    return firstLine.length > 40 ? firstLine.slice(0, 40) + "…" : firstLine;
+  }
+  return `Part ${idx + 1}`;
+}
+
 export function mountTxtReader(options: TxtMountOptions): ReaderRendition {
-  const { text, contentEl, fontSize, onNavChange, sectionSize } = options;
+  const {
+    text,
+    contentEl,
+    fontSize,
+    mode,
+    onNavChange,
+    onToc,
+    onTocActive,
+    sectionSize,
+  } = options;
   const sections = splitIntoSections(text, sectionSize);
 
-  const pageEl = document.createElement("div");
-  pageEl.className = "reader-txt";
-
-  const viewportEl = document.createElement("div");
-  const pagerEl = document.createElement("div");
-  pagerEl.style.fontSize = `${fontSize}px`;
-
-  viewportEl.appendChild(pagerEl);
-  pageEl.appendChild(viewportEl);
-  contentEl.innerHTML = "";
-  contentEl.appendChild(pageEl);
-
-  let sectionIdx = 0;
-
-  function emitNav(page: number, pageCount: number) {
-    const suffix =
+  const toc: ReaderTocItem[] = sections.map((section, idx) => ({
+    id: `part-${idx}`,
+    label:
       sections.length > 1
-        ? ` · Part ${sectionIdx + 1}/${sections.length}`
-        : "";
-    onNavChange?.({
-      canPrev: sectionIdx > 0 || page > 0,
-      canNext: sectionIdx < sections.length - 1 || page < pageCount - 1,
-      pageLabel: `Page ${page + 1} of ${pageCount}${suffix}`,
-    });
-  }
+        ? `Part ${idx + 1} — ${sectionLabel(section, idx)}`
+        : sectionLabel(section, idx),
+  }));
 
-  const paginator = createPaginator({
-    viewport: viewportEl,
-    pager: pagerEl,
-    onPageChange: emitNav,
+  const reader = createFlowReader({
+    contentEl,
+    mode: mode ?? "flip",
+    fontSize,
+    sectionCount: sections.length,
+    loadSection: (idx) => escapeHtml(sections[idx]),
+    flowClassName: "pm-flow-txt",
+    card: { className: "reader-txt" },
+    fontSizeTarget: "pager",
+    onNavChange,
+    toc,
+    tocTarget: (id) => {
+      const idx = Number(id.replace("part-", ""));
+      return Number.isInteger(idx) ? { sectionIdx: idx } : null;
+    },
+    tocActive: (idx) => `part-${idx}`,
+    onToc,
+    onTocActive,
+    label: ({ sectionIdx, page, pageCount, mode: m }) => {
+      const many = sections.length > 1;
+      const part = many ? ` · Part ${sectionIdx + 1}/${sections.length}` : "";
+      if (m === "scroll") {
+        return many
+          ? `Part ${sectionIdx + 1}/${sections.length}`
+          : "Continuous scroll";
+      }
+      return `Page ${page + 1} of ${pageCount}${part}`;
+    },
   });
 
-  function showSection(idx: number, atEnd = false) {
-    sectionIdx = idx;
-    pagerEl.textContent = sections[idx];
-    paginator.reset(atEnd ? Number.MAX_SAFE_INTEGER : 0);
-  }
-
-  showSection(0);
-
-  return {
-    destroy: () => paginator.destroy(),
-    prev: () => {
-      if (paginator.page > 0) {
-        paginator.goTo(paginator.page - 1);
-      } else if (sectionIdx > 0) {
-        showSection(sectionIdx - 1, true);
-      }
-    },
-    next: () => {
-      if (paginator.page < paginator.pageCount - 1) {
-        paginator.goTo(paginator.page + 1);
-      } else if (sectionIdx < sections.length - 1) {
-        showSection(sectionIdx + 1);
-      }
-    },
-    themes: {
-      fontSize(px: string) {
-        pagerEl.style.fontSize = px;
-        paginator.reflow();
-      },
-    },
-  };
+  reader.start();
+  return reader;
 }

@@ -1,10 +1,16 @@
-import type { ReaderNavState, ReaderRendition } from "./types";
+import type {
+  ReaderNavState,
+  ReaderRendition,
+  ReaderTocItem,
+} from "./types";
 
 export type PdfMountOptions = {
   data: ArrayBuffer;
   contentEl: HTMLElement;
   signal?: AbortSignal;
   onNavChange?: (state: ReaderNavState) => void;
+  onToc?: (items: ReaderTocItem[]) => void;
+  onTocActive?: (id: string | null) => void;
 };
 
 /**
@@ -15,7 +21,7 @@ export type PdfMountOptions = {
 export async function mountPdfReader(
   options: PdfMountOptions,
 ): Promise<ReaderRendition> {
-  const { data, contentEl, signal, onNavChange } = options;
+  const { data, contentEl, signal, onNavChange, onToc, onTocActive } = options;
 
   const pdfjs = await import("pdfjs-dist");
   // Served from public/ (same pdfjs-dist build) so opening a book never
@@ -27,6 +33,14 @@ export async function mountPdfReader(
   // effect re-runs.
   const pdf = await pdfjs.getDocument({ data: data.slice(0) }).promise;
   const totalPages = pdf.numPages;
+
+  // Sidebar entries: one per page.
+  onToc?.(
+    Array.from({ length: totalPages }, (_, i) => ({
+      id: `page-${i + 1}`,
+      label: `Page ${i + 1}`,
+    })),
+  );
 
   const wrapper = document.createElement("div");
   wrapper.className =
@@ -118,6 +132,7 @@ export async function mountPdfReader(
       canNext: n < totalPages,
       pageLabel: `Page ${n} of ${totalPages}`,
     });
+    onTocActive?.(`page-${n}`);
 
     // Warm the pages a turn away in either direction
     for (const m of [n + 1, n - 1]) {
@@ -166,6 +181,13 @@ export async function mountPdfReader(
     next: async () => {
       if (current < totalPages) {
         current++;
+        await show(current);
+      }
+    },
+    goToTocItem: async (id) => {
+      const n = Number(id.replace("page-", ""));
+      if (Number.isInteger(n) && n >= 1 && n <= totalPages) {
+        current = n;
         await show(current);
       }
     },

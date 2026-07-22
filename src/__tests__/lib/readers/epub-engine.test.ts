@@ -75,12 +75,10 @@ describe("CHAPTER_LABEL_RE", () => {
 
 describe("mountEpubReader", () => {
   let contentEl: HTMLDivElement;
-  let tocListEl: HTMLUListElement;
 
   beforeEach(() => {
     mockZip.files = { ...BASE_EPUB };
     contentEl = document.createElement("div");
-    tocListEl = document.createElement("ul");
     vi.clearAllMocks();
   });
 
@@ -88,7 +86,6 @@ describe("mountEpubReader", () => {
     await mountEpubReader({
       file: makeFile(),
       contentEl,
-      tocListEl,
       fontSize: 18,
     });
 
@@ -100,7 +97,6 @@ describe("mountEpubReader", () => {
     await mountEpubReader({
       file: makeFile(),
       contentEl,
-      tocListEl,
       fontSize: 20,
     });
 
@@ -112,7 +108,6 @@ describe("mountEpubReader", () => {
     const rendition = await mountEpubReader({
       file: makeFile(),
       contentEl,
-      tocListEl,
       fontSize: 18,
     });
 
@@ -128,7 +123,6 @@ describe("mountEpubReader", () => {
     await mountEpubReader({
       file: makeFile(),
       contentEl,
-      tocListEl,
       fontSize: 18,
       onNavChange,
     });
@@ -144,7 +138,6 @@ describe("mountEpubReader", () => {
     const rendition = await mountEpubReader({
       file: makeFile(),
       contentEl,
-      tocListEl,
       fontSize: 18,
     });
 
@@ -160,7 +153,6 @@ describe("mountEpubReader", () => {
     const rendition = await mountEpubReader({
       file: makeFile(),
       contentEl,
-      tocListEl,
       fontSize: 18,
       onNavChange,
     });
@@ -193,7 +185,6 @@ describe("mountEpubReader", () => {
     const rendition = await mountEpubReader({
       file: makeFile(),
       contentEl,
-      tocListEl,
       fontSize: 18,
     });
 
@@ -217,16 +208,17 @@ describe("mountEpubReader", () => {
       </navMap></ncx>`,
     };
 
+    const onToc = vi.fn();
     await mountEpubReader({
       file: makeFile(),
       contentEl,
-      tocListEl,
       fontSize: 18,
+      onToc,
     });
 
-    const links = tocListEl.querySelectorAll(".toc-link");
-    expect(links).toHaveLength(1);
-    expect(links[0].textContent).toBe("Chapter: The Great Beginning");
+    const items = onToc.mock.calls.at(-1)?.[0] as { label: string }[];
+    expect(items).toHaveLength(1);
+    expect(items[0].label).toBe("Chapter: The Great Beginning");
   });
 
   it("does not merge TOC entries when labels are on different files", async () => {
@@ -246,30 +238,30 @@ describe("mountEpubReader", () => {
       </navMap></ncx>`,
     };
 
+    const onToc = vi.fn();
     await mountEpubReader({
       file: makeFile(),
       contentEl,
-      tocListEl,
       fontSize: 18,
+      onToc,
     });
 
-    const links = tocListEl.querySelectorAll(".toc-link");
-    expect(links).toHaveLength(2);
+    const items = onToc.mock.calls.at(-1)?.[0] as unknown[];
+    expect(items).toHaveLength(2);
   });
 
-  it("calls onTocVisibility(true) when the NCX has entries, false when absent", async () => {
-    const onTocVisibility = vi.fn();
+  it("emits an empty TOC when the NCX is absent", async () => {
+    const onToc = vi.fn();
 
     await mountEpubReader({
       file: makeFile(),
       contentEl,
-      tocListEl,
       fontSize: 18,
-      onTocVisibility,
+      onToc,
     });
 
     // BASE_EPUB has no NCX → no TOC entries
-    expect(onTocVisibility).toHaveBeenCalledWith(false);
+    expect(onToc).toHaveBeenCalledWith([]);
   });
 
   it("throws when the ZIP cannot be parsed", async () => {
@@ -278,7 +270,7 @@ describe("mountEpubReader", () => {
     );
 
     await expect(
-      mountEpubReader({ file: makeFile(), contentEl, tocListEl, fontSize: 18 }),
+      mountEpubReader({ file: makeFile(), contentEl, fontSize: 18 }),
     ).rejects.toThrow("Cannot unzip");
   });
 
@@ -287,7 +279,7 @@ describe("mountEpubReader", () => {
       '<?xml version="1.0"?><container/>';
 
     await expect(
-      mountEpubReader({ file: makeFile(), contentEl, tocListEl, fontSize: 18 }),
+      mountEpubReader({ file: makeFile(), contentEl, fontSize: 18 }),
     ).rejects.toThrow("missing OPF path");
   });
 
@@ -298,7 +290,7 @@ describe("mountEpubReader", () => {
     </package>`;
 
     await expect(
-      mountEpubReader({ file: makeFile(), contentEl, tocListEl, fontSize: 18 }),
+      mountEpubReader({ file: makeFile(), contentEl, fontSize: 18 }),
     ).rejects.toThrow("No readable XHTML content");
   });
 });

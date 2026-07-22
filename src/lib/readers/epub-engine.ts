@@ -1,7 +1,12 @@
 import JSZip from "jszip";
 
-import { createPaginator } from "./paginator";
-import type { ReaderNavState, ReaderRendition } from "./types";
+import { createFlowReader } from "./flow-reader";
+import type { ReaderMode } from "./reader-mode";
+import type {
+  ReaderNavState,
+  ReaderRendition,
+  ReaderTocItem,
+} from "./types";
 
 type ManifestItem = { id: string; href: string; mt: string };
 type TocEntry = { label: string; href: string };
@@ -12,9 +17,10 @@ export type EpubRendition = ReaderRendition;
 export type EpubMountOptions = {
   file: File;
   contentEl: HTMLElement;
-  tocListEl: HTMLElement;
   fontSize: number;
-  onTocVisibility?: (hasToc: boolean) => void;
+  mode?: ReaderMode;
+  onToc?: (items: ReaderTocItem[]) => void;
+  onTocActive?: (id: string | null) => void;
   onNavChange?: (state: EpubNavState) => void;
 };
 
@@ -24,14 +30,8 @@ export const CHAPTER_LABEL_RE =
 export async function mountEpubReader(
   options: EpubMountOptions,
 ): Promise<EpubRendition> {
-  const {
-    file,
-    contentEl,
-    tocListEl,
-    fontSize,
-    onTocVisibility,
-    onNavChange,
-  } = options;
+  const { file, contentEl, fontSize, mode, onToc, onTocActive, onNavChange } =
+    options;
 
   let zip: JSZip;
   try {
@@ -141,12 +141,8 @@ export async function mountEpubReader(
     }
   }
 
-  const viewerEl = document.createElement("div");
-  viewerEl.id = "epub-viewer";
-  viewerEl.style.cssText = [
+  const viewerCssText = [
     "width:100%",
-    // Page mode: the page fills the visible area and keeps that size;
-    // chapter text is paginated inside it.
     "height:100%",
     "overflow:hidden",
     "background:#fff",
@@ -160,60 +156,30 @@ export async function mountEpubReader(
     "font-family:'Lora',Georgia,'Times New Roman',serif",
   ].join(";");
 
-  const viewportEl = document.createElement("div");
-  const pagerEl = document.createElement("div");
-  viewportEl.appendChild(pagerEl);
-  viewerEl.appendChild(viewportEl);
+  // Typographic CSS injected ahead of every chapter's body, in every mode.
+  const contentCss = `
+    ${combinedCss}
+    body, p, div, span, li, td, th {
+      font-family: 'Lora', Georgia, 'Times New Roman', serif;
+      line-height: 1.7;
+    }
+    p { margin-top: 0.15em; margin-bottom: 0.15em; line-height: 1.7; }
+    p:empty { display: none; }
+    h1, h2, h3, h4, h5, h6 {
+      font-family: 'Lora', Georgia, serif;
+      color: #1B365D;
+      line-height: 1.3;
+      margin-top: 1.8em;
+      margin-bottom: 0.4em;
+      font-weight: 600;
+    }
+    img  { max-width:100%; max-height:95%; height:auto; display:block; margin:1.25rem auto; break-inside:avoid; }
+    pre, code { white-space:pre-wrap; font-family:monospace; line-height:1.5; }
+    a    { color:#2E6DA4; }
+    blockquote { border-left:3px solid #c5cdd8; margin:1em 0; padding-left:1em; color:#555; }
+  `;
 
-  contentEl.innerHTML = "";
-  contentEl.classList.add("is-epub");
-  contentEl.appendChild(viewerEl);
-
-  let currentIdx = 0;
-  let activeTocLink: HTMLAnchorElement | null = null;
-
-  function emitNav() {
-    const item = spine[currentIdx];
-    const tocMatch = tocEntries.find((e) =>
-      item.href.endsWith(e.href.split("#")[0]),
-    );
-    const base = tocMatch
-      ? tocMatch.label
-      : `Part ${currentIdx + 1} of ${spine.length}`;
-    const suffix =
-      paginator.pageCount > 1
-        ? ` · ${paginator.page + 1}/${paginator.pageCount}`
-        : "";
-    onNavChange?.({
-      canPrev: currentIdx > 0 || paginator.page > 0,
-      canNext:
-        currentIdx < spine.length - 1 ||
-        paginator.page < paginator.pageCount - 1,
-      pageLabel: base + suffix,
-    });
-  }
-
-  const paginator = createPaginator({
-    viewport: viewportEl,
-    pager: pagerEl,
-    onPageChange: emitNav,
-  });
-
-  function setActiveTocLink(linkEl: HTMLAnchorElement | null) {
-    if (activeTocLink) activeTocLink.classList.remove("active");
-    activeTocLink = linkEl;
-    if (activeTocLink) activeTocLink.classList.add("active");
-  }
-
-  async function displayItem(
-    idx: number,
-    opts: { link?: HTMLAnchorElement | null; atEnd?: boolean } = {},
-  ) {
-    if (idx < 0 || idx >= spine.length) return;
-    currentIdx = idx;
-    pagerEl.innerHTML =
-      '<p style="color:#888;text-align:center;padding:2rem">Loading…</p>';
-
+  async function loadChapterHtml(idx: number): Promise<string> {
     const item = spine[idx];
     const html = await readZip(abs(item.href));
     const bm = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
@@ -223,10 +189,7 @@ export async function mountEpubReader(
       /<(link|meta|script)\b[^>]*\/?>(?:[\s\S]*?<\/\1>)?/gi,
       "",
     );
-    body = body.replace(
-      /<p[^>]*>(?:\s|&nbsp;|&#160;|&#xA0;)*<\/p>/gi,
-      "",
-    );
+    body = body.replace(/<p[^>]*>(?:\s|&nbsp;|&#160;|&#xA0;)*<\/p>/gi, "");
     body = body.replace(/(<br\s*\/?>\s*){3,}/gi, "<br>");
 
     const imgRefs = new Set<string>();
@@ -242,109 +205,81 @@ export async function mountEpubReader(
       return blobUrl ? `${attr}="${blobUrl}"` : match;
     });
 
-    pagerEl.innerHTML = `<style>
-      ${combinedCss}
-      body, p, div, span, li, td, th {
-        font-family: 'Lora', Georgia, 'Times New Roman', serif;
-        line-height: 1.7;
-      }
-      p { margin-top: 0.15em; margin-bottom: 0.15em; line-height: 1.7; }
-      p:empty { display: none; }
-      h1, h2, h3, h4, h5, h6 {
-        font-family: 'Lora', Georgia, serif;
-        color: #1B365D;
-        line-height: 1.3;
-        margin-top: 1.8em;
-        margin-bottom: 0.4em;
-        font-weight: 600;
-      }
-      img  { max-width:100%; max-height:95%; height:auto; display:block; margin:1.25rem auto; break-inside:avoid; }
-      pre, code { white-space:pre-wrap; font-family:monospace; line-height:1.5; }
-      a    { color:#2E6DA4; }
-      blockquote { border-left:3px solid #c5cdd8; margin:1em 0; padding-left:1em; color:#555; }
-    </style>${body}`;
-    paginator.reset(opts.atEnd ? Number.MAX_SAFE_INTEGER : 0);
-
-    if (opts.link) {
-      setActiveTocLink(opts.link);
-    } else {
-      const firstMatch =
-        [...tocListEl.querySelectorAll<HTMLAnchorElement>(".toc-link")].find(
-          (el) => el.dataset.filehref === item.href,
-        ) ?? null;
-      setActiveTocLink(firstMatch);
-    }
+    return body;
   }
 
-  tocListEl.innerHTML = "";
-  for (const entry of tocEntries) {
-    const [fileHref] = entry.href.split("#");
+  // Resolve each TOC entry to a spine section (+ optional fragment) up front so
+  // the sidebar is plain data the React layer can render.
+  type ResolvedToc = {
+    id: string;
+    label: string;
+    sectionIdx: number;
+    fragment?: string;
+  };
+  const resolvedToc: ResolvedToc[] = [];
+  tocEntries.forEach((entry, i) => {
+    const [fileHref, frag] = entry.href.split("#");
     const spineItem = spine.find(
       (s) =>
         s.href === fileHref ||
         s.href.endsWith(fileHref) ||
         fileHref.endsWith(s.href),
     );
-    if (!spineItem) continue;
-
-    const li = document.createElement("li");
-    li.className = "toc-item";
-    const a = document.createElement("a");
-    a.className = "toc-link";
-    a.textContent = entry.label;
-    a.title = entry.label;
-    a.dataset.href = entry.href;
-    a.dataset.filehref = spineItem.href;
-    a.href = "#";
-
-    a.addEventListener("click", async (e) => {
-      e.preventDefault();
-      const [, frag] = entry.href.split("#");
-      const idx = spine.indexOf(spineItem);
-      if (idx !== currentIdx) {
-        await displayItem(idx, { link: a });
-      } else {
-        setActiveTocLink(a);
-      }
-      if (frag) {
-        const target = pagerEl.querySelector("#" + CSS.escape(frag));
-        if (target) paginator.goTo(paginator.pageForElement(target));
-      }
+    if (!spineItem) return;
+    resolvedToc.push({
+      id: `toc-${i}`,
+      label: entry.label,
+      sectionIdx: spine.indexOf(spineItem),
+      fragment: frag || undefined,
     });
+  });
 
-    li.appendChild(a);
-    tocListEl.appendChild(li);
-  }
+  const toc: ReaderTocItem[] = resolvedToc.map(({ id, label }) => ({
+    id,
+    label,
+  }));
 
-  onTocVisibility?.(tocEntries.length > 0);
-
-  await displayItem(0);
-
-  return {
-    destroy() {
-      paginator.destroy();
+  const reader = createFlowReader({
+    contentEl,
+    mode: mode ?? "flip",
+    fontSize,
+    sectionCount: spine.length,
+    loadSection: loadChapterHtml,
+    flowClassName: "pm-flow-epub",
+    contentCss,
+    card: { id: "epub-viewer", cssText: viewerCssText },
+    contentElClass: "is-epub",
+    fontSizeTarget: "card",
+    onNavChange,
+    toc,
+    tocTarget: (id) => {
+      const entry = resolvedToc.find((t) => t.id === id);
+      return entry
+        ? { sectionIdx: entry.sectionIdx, fragment: entry.fragment }
+        : null;
+    },
+    tocActive: (idx) =>
+      resolvedToc.find((t) => t.sectionIdx === idx)?.id ?? null,
+    onToc,
+    onTocActive,
+    label: ({ sectionIdx, page, pageCount, mode: m }) => {
+      const item = spine[sectionIdx];
+      const tocMatch = tocEntries.find((e) =>
+        item.href.endsWith(e.href.split("#")[0]),
+      );
+      const base = tocMatch
+        ? tocMatch.label
+        : `Part ${sectionIdx + 1} of ${spine.length}`;
+      if (m === "scroll") return base;
+      const suffix = pageCount > 1 ? ` · ${page + 1}/${pageCount}` : "";
+      return base + suffix;
+    },
+    onDestroy: () => {
       Object.values(imgBlobCache).forEach((u) => URL.revokeObjectURL(u));
     },
-    prev: async () => {
-      if (paginator.page > 0) {
-        paginator.goTo(paginator.page - 1);
-      } else if (currentIdx > 0) {
-        // Arriving from the following chapter: land on its last page
-        await displayItem(currentIdx - 1, { atEnd: true });
-      }
-    },
-    next: async () => {
-      if (paginator.page < paginator.pageCount - 1) {
-        paginator.goTo(paginator.page + 1);
-      } else if (currentIdx < spine.length - 1) {
-        await displayItem(currentIdx + 1);
-      }
-    },
-    themes: {
-      fontSize(px: string) {
-        viewerEl.style.fontSize = px;
-        paginator.reflow();
-      },
-    },
-  };
+  });
+
+  await reader.start();
+
+  return reader;
 }
