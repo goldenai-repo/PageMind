@@ -5,9 +5,8 @@ import {
   BookOpen,
   ChevronLeft,
   Columns2,
-  List,
+  PanelLeft,
   ScrollText,
-  X,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -226,15 +225,17 @@ export function BookReader({ book, onClose }: BookReaderProps) {
       aria-label="Book reader"
     >
       <header className="flex h-[60px] shrink-0 items-center justify-between gap-4 border-b border-border bg-white px-4 shadow-[0_1px_6px_rgba(0,0,0,0.06)] sm:px-7">
-        <Button
-          type="button"
-          variant="ghost"
-          onClick={onClose}
-          className="h-9 gap-1.5 px-2 text-[0.87rem] font-medium text-navy hover:bg-navy/5 hover:text-navy"
-        >
-          <ChevronLeft className="size-4" />
-          <span className="hidden sm:inline">My Library</span>
-        </Button>
+        <div className="flex shrink-0 items-center gap-1">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            className="h-9 gap-1.5 px-2 text-[0.87rem] font-medium text-navy hover:bg-navy/5 hover:text-navy"
+          >
+            <ChevronLeft className="size-4" />
+            <span className="hidden sm:inline">My Library</span>
+          </Button>
+        </div>
 
         <div className="min-w-0 flex-1 text-center">
           <span className="block truncate text-[0.92rem] font-semibold text-foreground">
@@ -243,19 +244,6 @@ export function BookReader({ book, onClose }: BookReaderProps) {
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
-          <Button
-            type="button"
-            variant="outline"
-            size="icon-sm"
-            title="Toggle contents"
-            onClick={() => setTocOpen((v) => !v)}
-            className={cn(
-              "rounded-md border-border bg-[#f0f2f5]",
-              !hasToc && "invisible",
-            )}
-          >
-            <List className="size-3.5" />
-          </Button>
           {reflowable && (
             <div className="mr-1 flex items-center gap-0.5 rounded-md border border-border bg-[#f0f2f5] p-0.5">
               {READER_MODE_OPTIONS.map(({ value, label, icon: Icon }) => (
@@ -317,18 +305,20 @@ export function BookReader({ book, onClose }: BookReaderProps) {
           )}
           aria-label="Table of contents"
         >
-          <div className="flex shrink-0 items-center justify-between border-b border-border bg-white px-3 py-3 text-[0.72rem] font-bold tracking-wider text-navy uppercase">
-            <span className="px-1">Contents</span>
+          <div className="flex shrink-0 items-center gap-1 border-b border-border bg-white px-2 py-2.5 text-[0.72rem] font-bold tracking-wider text-navy uppercase">
             <Button
               type="button"
               variant="ghost"
-              size="icon-xs"
-              aria-label="Close contents"
+              size="icon-sm"
+              title="Hide contents"
+              aria-label="Hide contents"
+              aria-pressed={tocOpen}
               onClick={() => setTocOpen(false)}
-              className="text-muted-foreground"
+              className="rounded-md text-navy hover:bg-navy/5 hover:text-navy"
             >
-              <X className="size-3.5" />
+              <PanelLeft className="size-4" />
             </Button>
+            <span>Contents</span>
           </div>
           <ul className="toc-list m-0 flex-1 list-none overflow-y-auto p-2" role="tree">
             {toc.map((item) => (
@@ -353,6 +343,20 @@ export function BookReader({ book, onClose }: BookReaderProps) {
         </aside>
 
         <div className="relative flex min-w-0 flex-1 flex-col">
+          {hasToc && !tocOpen ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              title="Show contents"
+              aria-label="Show contents"
+              aria-pressed={tocOpen}
+              onClick={() => setTocOpen(true)}
+              className="absolute left-2 top-2 z-10 rounded-md border-border bg-white text-navy shadow-sm hover:bg-navy/5 hover:text-navy"
+            >
+              <PanelLeft className="size-4" />
+            </Button>
+          ) : null}
           <div
             ref={contentRef}
             className={cn(
