@@ -28,7 +28,10 @@ export function UploadSection({ userId }: { userId: string }) {
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("recent");
   const booksRef = useRef(books);
-  booksRef.current = books;
+
+  useEffect(() => {
+    booksRef.current = books;
+  }, [books]);
 
   const visibleBooks = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -111,7 +114,14 @@ export function UploadSection({ userId }: { userId: string }) {
     dragDepth.current = 0;
     setDragActive(false);
     setZoneActive(false);
-    setCurrentBook(book);
+    const updated: LibraryBook = {
+      ...book,
+      inMyLibrary: true,
+      lastOpenedAt: new Date(),
+    };
+    setBooks((prev) => prev.map((b) => (b.id === book.id ? updated : b)));
+    void saveBook(userId, updated);
+    setCurrentBook(updated);
   };
 
   useEffect(() => {
@@ -355,7 +365,41 @@ export function UploadSection({ userId }: { userId: string }) {
       )}
 
       {currentBook ? (
-        <BookReader book={currentBook} onClose={() => setCurrentBook(null)} />
+        <BookReader
+          book={currentBook}
+          onClose={() => setCurrentBook(null)}
+          onProgress={(progress) => {
+            setBooks((prev) => {
+              const current = prev.find((b) => b.id === currentBook.id);
+              if (!current) return prev;
+              const updated: LibraryBook = {
+                ...current,
+                inMyLibrary: true,
+                lastReadPage: progress.lastReadPage,
+                totalPages: progress.totalPages,
+                progressPercent: progress.progressPercent,
+                locator: progress.locator,
+                lastOpenedAt: new Date(),
+                ...(progress.progressPercent >= 100
+                  ? { status: "finished" as const }
+                  : {}),
+              };
+              void saveBook(userId, updated);
+              return prev.map((b) => (b.id === current.id ? updated : b));
+            });
+            setCurrentBook((current) =>
+              current
+                ? {
+                    ...current,
+                    lastReadPage: progress.lastReadPage,
+                    totalPages: progress.totalPages,
+                    progressPercent: progress.progressPercent,
+                    locator: progress.locator,
+                  }
+                : current,
+            );
+          }}
+        />
       ) : null}
     </>
   );

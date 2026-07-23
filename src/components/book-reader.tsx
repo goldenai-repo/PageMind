@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import type { LibraryBook } from "@/lib/books";
+import type { LibraryBook, ReadingProgressUpdate } from "@/lib/books";
 import { mountEpubReader } from "@/lib/readers/epub-engine";
 import { mountPdfReader } from "@/lib/readers/pdf";
 import {
@@ -41,12 +41,19 @@ const READER_MODE_OPTIONS: {
 type BookReaderProps = {
   book: LibraryBook;
   onClose: () => void;
+  /** Debounced by the parent if needed; called on page/section changes. */
+  onProgress?: (progress: ReadingProgressUpdate) => void;
 };
 
-export function BookReader({ book, onClose }: BookReaderProps) {
+export function BookReader({ book, onClose, onProgress }: BookReaderProps) {
   const contentRef = useRef<HTMLDivElement>(null);
   const renditionRef = useRef<ReaderRendition | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const onProgressRef = useRef(onProgress);
+  const progressTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
+  const latestProgressRef = useRef<ReadingProgressUpdate | null>(null);
 
   const [fontSize, setFontSize] = useState(18);
   const [loading, setLoading] = useState(true);
@@ -69,6 +76,67 @@ export function BookReader({ book, onClose }: BookReaderProps) {
   });
 
   const reflowable = book.ext === "txt" || book.ext === "epub";
+
+  useEffect(() => {
+    onProgressRef.current = onProgress;
+  }, [onProgress]);
+
+  // Keep the latest book payload for mount/resume without remounting when
+  // progress fields update on the same id.
+  const bookRef = useRef(book);
+  useEffect(() => {
+    bookRef.current = book;
+  }, [book]);
+
+  const flushProgress = () => {
+    const latest = latestProgressRef.current;
+    if (!latest) return;
+    latestProgressRef.current = null;
+    onProgressRef.current?.(latest);
+  };
+
+  const scheduleProgress = (progress: ReadingProgressUpdate) => {
+    latestProgressRef.current = progress;
+    clearTimeout(progressTimerRef.current);
+    progressTimerRef.current = setTimeout(() => {
+      flushProgress();
+    }, 1200);
+  };
+
+  const handleNavChange = (state: ReaderNavState) => {
+    setNav(state);
+    const current = bookRef.current;
+    if (
+      state.page == null ||
+      state.totalPages == null ||
+      state.progressPercent == null
+    ) {
+      return;
+    }
+
+    let progress: ReadingProgressUpdate;
+    if (current.ext === "pdf") {
+      progress = {
+        lastReadPage: state.page,
+        totalPages: state.totalPages,
+        progressPercent: state.progressPercent,
+        locator: { format: "pdf", page: state.page },
+      };
+    } else {
+      progress = {
+        lastReadPage: state.page,
+        totalPages: state.totalPages,
+        progressPercent: state.progressPercent,
+        locator: {
+          format: current.ext,
+          sectionIdx: state.sectionIdx ?? 0,
+          page: state.page,
+          mode: modeRef.current,
+        },
+      };
+    }
+    scheduleProgress(progress);
+  };
 
   // Keep the ref current and apply mode changes to the live reader. Declared
   // before the engine-mount effect so the reader mounts in the saved mode.
@@ -94,6 +162,8 @@ export function BookReader({ book, onClose }: BookReaderProps) {
   useEffect(() => {
     const content = contentRef.current;
     if (!content) return;
+
+    const mountedBook = bookRef.current;
 
     abortRef.current?.abort();
     const abort = new AbortController();
@@ -122,30 +192,45 @@ export function BookReader({ book, onClose }: BookReaderProps) {
       setActiveTocId(id);
     };
 
+    const resumeSection =
+      mountedBook.locator &&
+      (mountedBook.locator.format === "txt" ||
+        mountedBook.locator.format === "epub")
+        ? mountedBook.locator.sectionIdx
+        : undefined;
+    const resumePdfPage =
+      mountedBook.locator?.format === "pdf"
+        ? mountedBook.locator.page
+        : mountedBook.ext === "pdf" && mountedBook.lastReadPage
+          ? mountedBook.lastReadPage
+          : undefined;
+
     const run = async () => {
       try {
-        if (book.ext === "txt") {
-          if (typeof book.data !== "string") {
+        if (mountedBook.ext === "txt") {
+          if (typeof mountedBook.data !== "string") {
             throw new Error("Invalid text file data.");
           }
           renditionRef.current = mountTxtReader({
-            text: book.data,
+            text: mountedBook.data,
             contentEl: content,
             fontSize: 18,
             mode: modeRef.current,
-            onNavChange: setNav,
+            initialSectionIdx: resumeSection,
+            onNavChange: handleNavChange,
             onToc: handleToc,
             onTocActive: handleTocActive,
           });
-        } else if (book.ext === "pdf") {
-          if (!(book.data instanceof ArrayBuffer)) {
+        } else if (mountedBook.ext === "pdf") {
+          if (!(mountedBook.data instanceof ArrayBuffer)) {
             throw new Error("Invalid PDF data.");
           }
           const rendition = await mountPdfReader({
-            data: book.data,
+            data: mountedBook.data,
             contentEl: content,
             signal: abort.signal,
-            onNavChange: setNav,
+            initialPage: resumePdfPage,
+            onNavChange: handleNavChange,
             onToc: handleToc,
             onTocActive: handleTocActive,
           });
@@ -154,16 +239,17 @@ export function BookReader({ book, onClose }: BookReaderProps) {
             return;
           }
           renditionRef.current = rendition;
-        } else if (book.ext === "epub") {
-          if (!(book.data instanceof File)) {
+        } else if (mountedBook.ext === "epub") {
+          if (!(mountedBook.data instanceof File)) {
             throw new Error("Invalid EPUB data.");
           }
           const rendition = await mountEpubReader({
-            file: book.data,
+            file: mountedBook.data,
             contentEl: content,
             fontSize: 18,
             mode: modeRef.current,
-            onNavChange: setNav,
+            initialSectionIdx: resumeSection,
+            onNavChange: handleNavChange,
             onToc: handleToc,
             onTocActive: handleTocActive,
           });
@@ -187,10 +273,15 @@ export function BookReader({ book, onClose }: BookReaderProps) {
 
     return () => {
       abort.abort();
+      clearTimeout(progressTimerRef.current);
+      flushProgress();
       renditionRef.current?.destroy();
       renditionRef.current = null;
     };
-  }, [book]);
+    // Remount only when switching to a different book — progress updates must
+    // not tear down the reader (that caused a max-update-depth loop).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [book.id]);
 
   useEffect(() => {
     if (book.ext === "pdf") return;

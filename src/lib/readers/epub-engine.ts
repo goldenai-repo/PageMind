@@ -19,6 +19,8 @@ export type EpubMountOptions = {
   contentEl: HTMLElement;
   fontSize: number;
   mode?: ReaderMode;
+  /** 0-based spine section to resume. */
+  initialSectionIdx?: number;
   onToc?: (items: ReaderTocItem[]) => void;
   onTocActive?: (id: string | null) => void;
   onNavChange?: (state: EpubNavState) => void;
@@ -30,8 +32,16 @@ export const CHAPTER_LABEL_RE =
 export async function mountEpubReader(
   options: EpubMountOptions,
 ): Promise<EpubRendition> {
-  const { file, contentEl, fontSize, mode, onToc, onTocActive, onNavChange } =
-    options;
+  const {
+    file,
+    contentEl,
+    fontSize,
+    mode,
+    initialSectionIdx,
+    onToc,
+    onTocActive,
+    onNavChange,
+  } = options;
 
   let zip: JSZip;
   try {
@@ -243,6 +253,7 @@ export async function mountEpubReader(
     contentEl,
     mode: mode ?? "flip",
     fontSize,
+    initialSectionIdx,
     sectionCount: spine.length,
     loadSection: loadChapterHtml,
     flowClassName: "pm-flow-epub",

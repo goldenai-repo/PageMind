@@ -1,3 +1,5 @@
+import { computeSectionProgressPercent } from "@/lib/books";
+
 import { mountFlipBook, prefetchFlipBook, type FlipHandle } from "./flip-book";
 import { createPaginator, type Paginator } from "./paginator";
 import type { ReaderMode } from "./reader-mode";
@@ -19,6 +21,8 @@ export type FlowReaderOptions = {
   contentEl: HTMLElement;
   /** Initial reading mode. */
   mode: ReaderMode;
+  /** 0-based section to open on start (resume). */
+  initialSectionIdx?: number;
   /** Initial font size in px. */
   fontSize: number;
   /** Number of sections (chapters for EPUB, text parts for TXT). */
@@ -133,6 +137,16 @@ export function createFlowReader(options: FlowReaderOptions): FlowReader {
       canPrev: page > 0 || sectionIdx > 0,
       canNext: page < pageCount - 1 || sectionIdx < sectionCount - 1,
       pageLabel: label({ sectionIdx, page, pageCount, mode }),
+      page: page + 1,
+      totalPages: Math.max(1, pageCount),
+      progressPercent: computeSectionProgressPercent(
+        sectionIdx,
+        sectionCount,
+        page,
+        pageCount,
+      ),
+      sectionIdx,
+      sectionCount,
     });
   }
 
@@ -144,6 +158,16 @@ export function createFlowReader(options: FlowReaderOptions): FlowReader {
       canPrev: !flip.isAtStart() || sectionIdx > 0,
       canNext: !flip.isAtEnd() || sectionIdx < sectionCount - 1,
       pageLabel: label({ sectionIdx, page, pageCount: count, mode }),
+      page: page + 1,
+      totalPages: Math.max(1, count),
+      progressPercent: computeSectionProgressPercent(
+        sectionIdx,
+        sectionCount,
+        page,
+        count,
+      ),
+      sectionIdx,
+      sectionCount,
     });
   }
 
@@ -552,7 +576,12 @@ export function createFlowReader(options: FlowReaderOptions): FlowReader {
     },
     start: () => {
       onToc?.(options.toc ?? []);
-      return showSection(0);
+      const initial = options.initialSectionIdx ?? 0;
+      const idx = Math.min(
+        Math.max(0, initial),
+        Math.max(0, sectionCount - 1),
+      );
+      return showSection(idx);
     },
     prev,
     next,

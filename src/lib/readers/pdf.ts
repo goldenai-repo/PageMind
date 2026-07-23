@@ -1,3 +1,5 @@
+import { computeProgressPercent } from "@/lib/books";
+
 import type {
   ReaderNavState,
   ReaderRendition,
@@ -8,6 +10,8 @@ export type PdfMountOptions = {
   data: ArrayBuffer;
   contentEl: HTMLElement;
   signal?: AbortSignal;
+  /** 1-based page to open on mount (clamped). */
+  initialPage?: number;
   onNavChange?: (state: ReaderNavState) => void;
   onToc?: (items: ReaderTocItem[]) => void;
   onTocActive?: (id: string | null) => void;
@@ -33,6 +37,10 @@ export async function mountPdfReader(
   // effect re-runs.
   const pdf = await pdfjs.getDocument({ data: data.slice(0) }).promise;
   const totalPages = pdf.numPages;
+  const startPage = Math.min(
+    totalPages,
+    Math.max(1, options.initialPage ?? 1),
+  );
 
   // Sidebar entries: one per page.
   onToc?.(
@@ -48,7 +56,7 @@ export async function mountPdfReader(
   contentEl.innerHTML = "";
   contentEl.appendChild(wrapper);
 
-  let current = 1;
+  let current = startPage;
   let showSeq = 0;
   let destroyed = false;
 
@@ -131,6 +139,9 @@ export async function mountPdfReader(
       canPrev: n > 1,
       canNext: n < totalPages,
       pageLabel: `Page ${n} of ${totalPages}`,
+      page: n,
+      totalPages,
+      progressPercent: computeProgressPercent(n, totalPages),
     });
     onTocActive?.(`page-${n}`);
 

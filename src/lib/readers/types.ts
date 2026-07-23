@@ -4,6 +4,16 @@ export type ReaderNavState = {
   canPrev: boolean;
   canNext: boolean;
   pageLabel: string;
+  /** 1-based page within the current pagination context (section or PDF). */
+  page?: number;
+  /** Pages in the current context (section page count, or PDF total). */
+  totalPages?: number;
+  /** 0–100 progress across the whole book when the engine can estimate it. */
+  progressPercent?: number;
+  /** Current section index for reflowable books (0-based). */
+  sectionIdx?: number;
+  /** Total sections for reflowable books. */
+  sectionCount?: number;
 };
 
 /** A navigable entry shown in the reader sidebar (chapter / part / page). */

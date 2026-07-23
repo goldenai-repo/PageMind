@@ -11,6 +11,8 @@ export type TxtMountOptions = {
   contentEl: HTMLElement;
   fontSize: number;
   mode?: ReaderMode;
+  /** 0-based section to resume. */
+  initialSectionIdx?: number;
   onNavChange?: (state: ReaderNavState) => void;
   onToc?: (items: ReaderTocItem[]) => void;
   onTocActive?: (id: string | null) => void;
@@ -72,6 +74,7 @@ export function mountTxtReader(options: TxtMountOptions): ReaderRendition {
     contentEl,
     fontSize,
     mode,
+    initialSectionIdx,
     onNavChange,
     onToc,
     onTocActive,
@@ -91,6 +94,7 @@ export function mountTxtReader(options: TxtMountOptions): ReaderRendition {
     contentEl,
     mode: mode ?? "flip",
     fontSize,
+    initialSectionIdx,
     sectionCount: sections.length,
     loadSection: (idx) => escapeHtml(sections[idx]),
     flowClassName: "pm-flow-txt",
