@@ -11,15 +11,40 @@ export const COVERS = [
 
 export type BookExt = "pdf" | "epub" | "txt";
 
-export type LibraryBook = {
+export const BOOK_MIME: Record<BookExt, string> = {
+  pdf: "application/pdf",
+  epub: "application/epub+zip",
+  txt: "text/plain",
+};
+
+export function isBookExt(value: string): value is BookExt {
+  return value === "pdf" || value === "epub" || value === "txt";
+}
+
+/** Book metadata from the shared library (no file data). */
+export type BookMeta = {
   id: string;
   title: string;
   ext: BookExt;
   cover: string;
   size: string;
   addedAt: Date;
+};
+
+/** Wire format for BookMeta over the API. */
+export type BookMetaJson = Omit<BookMeta, "addedAt"> & { addedAt: string };
+
+export type LibraryBook = BookMeta & {
   /** File for EPUB; ArrayBuffer for PDF; string for TXT */
   data: File | ArrayBuffer | string;
+};
+
+/** Per-user shelf state for one book. Dates are ISO 8601. */
+export type ShelfEntry = {
+  bookId: string;
+  archived: boolean;
+  lastReadAt: string | null;
+  updatedAt: string;
 };
 
 export function formatSize(bytes: number) {
