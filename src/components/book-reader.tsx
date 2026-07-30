@@ -37,8 +37,11 @@ export function BookReader({ book, onClose }: BookReaderProps) {
   });
 
   const [tips, setTips] = useState<TipCard[]>([]);
-  const [tipsOpen, setTipsOpen] = useState(false);
+  const [visibleTips, setVisibleTips] = useState<TipCard[]>([]);
+  const [notesOpen, setNotesOpen] = useState(true);
   const [tipsLoading, setTipsLoading] = useState(true);
+  // Bumped when a rendition finishes mounting, so notes recompute for page 1.
+  const [readerReady, setReaderReady] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -55,6 +58,27 @@ export function BookReader({ book, onClose }: BookReaderProps) {
       cancelled = true;
     };
   }, [book.id]);
+
+  // Show only the notes whose anchor phrase is on the current page. Recomputes
+  // on every page turn (nav), when notes load, and when a book first mounts.
+  useEffect(() => {
+    const rendition = renditionRef.current;
+    if (!rendition) return;
+    let cancelled = false;
+    const strip = (s: string) => s.replace(/\s+/g, "");
+    Promise.resolve(rendition.getContext())
+      .then((ctx) => {
+        if (cancelled) return;
+        const haystack = strip(ctx.text);
+        setVisibleTips(
+          tips.filter((t) => haystack.includes(strip(t.anchor.text))),
+        );
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [nav, tips, readerReady]);
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -149,7 +173,11 @@ export function BookReader({ book, onClose }: BookReaderProps) {
           err instanceof Error ? err.message : "Could not open this file.",
         );
       } finally {
-        if (!abort.signal.aborted) setLoading(false);
+        if (!abort.signal.aborted) {
+          setLoading(false);
+          // Rendition is mounted and page 1 is laid out — compute its notes.
+          setReaderReady((n) => n + 1);
+        }
       }
     };
 
@@ -200,12 +228,12 @@ export function BookReader({ book, onClose }: BookReaderProps) {
             type="button"
             variant="outline"
             size="icon-sm"
-            title="Tips"
-            aria-pressed={tipsOpen}
-            onClick={() => setTipsOpen((v) => !v)}
+            title="Smart notes"
+            aria-pressed={notesOpen}
+            onClick={() => setNotesOpen((v) => !v)}
             className={cn(
               "relative rounded-md border-border bg-[#f0f2f5]",
-              tipsOpen && "border-navy bg-navy/10 text-navy",
+              notesOpen && "border-navy bg-navy/10 text-navy",
             )}
           >
             <Lightbulb className="size-3.5" />
@@ -355,18 +383,18 @@ export function BookReader({ book, onClose }: BookReaderProps) {
         <aside
           className={cn(
             "flex shrink-0 flex-col overflow-hidden border-l border-border bg-[#f5f7fb] transition-[width] duration-200",
-            tipsOpen ? "w-[320px]" : "w-0 border-l-0",
+            notesOpen ? "w-[320px]" : "w-0 border-l-0",
           )}
-          aria-label="Tips"
+          aria-label="Smart notes"
         >
           <div className="flex shrink-0 items-center justify-between border-b border-border bg-white px-3 py-3 text-[0.72rem] font-bold tracking-wider text-navy uppercase">
-            <span className="px-1">Tips</span>
+            <span className="px-1">Smart Notes</span>
             <Button
               type="button"
               variant="ghost"
               size="icon-xs"
-              aria-label="Close tips"
-              onClick={() => setTipsOpen(false)}
+              aria-label="Close smart notes"
+              onClick={() => setNotesOpen(false)}
               className="text-muted-foreground"
             >
               <X className="size-3.5" />
@@ -376,14 +404,19 @@ export function BookReader({ book, onClose }: BookReaderProps) {
           <div className="flex-1 space-y-3 overflow-y-auto p-3">
             {tipsLoading ? (
               <p className="px-1 pt-6 text-center text-[0.8rem] text-muted-foreground">
-                Loading tips…
+                Loading…
               </p>
             ) : tips.length === 0 ? (
               <p className="px-1 pt-6 text-center text-[0.8rem] leading-relaxed text-muted-foreground">
-                No tips for this book yet.
+                No smart notes for this book yet.
+              </p>
+            ) : visibleTips.length === 0 ? (
+              <p className="px-1 pt-6 text-center text-[0.8rem] leading-relaxed text-muted-foreground">
+                No smart notes on this page. Keep reading — they appear beside
+                the passages they annotate.
               </p>
             ) : null}
-            {tips.map((tip) => {
+            {visibleTips.map((tip) => {
               const meta = TIP_TYPES[tip.type];
               return (
                 <div
