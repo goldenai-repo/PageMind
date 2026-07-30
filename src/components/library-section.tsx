@@ -8,6 +8,7 @@ import {
   Plus,
   Search,
   Upload,
+  X,
 } from "lucide-react";
 
 import { BookReader } from "@/components/book-reader";
@@ -25,6 +26,7 @@ import {
   fetchShelf,
   loadBookData,
   migrateLocalBooks,
+  removeShelfEntry,
   updateShelfEntry,
   uploadBook,
 } from "@/lib/library-api";
@@ -36,6 +38,9 @@ function hasFiles(e: DragEvent | React.DragEvent) {
 
 type SortKey = "recent" | "title";
 type Tab = "library" | "shelf";
+
+/** A quick peek shouldn't shelve the book — only mark it read after this long. */
+const MARK_READ_AFTER_MS = 10_000;
 
 /** When a shelf book was last touched — for recency sorting. */
 function shelfTime(entry: ShelfEntry | undefined) {
@@ -157,21 +162,7 @@ export function LibrarySection() {
     setZoneActive(false);
     setOpeningId(meta.id);
     try {
-      const book = await loadBookData(meta);
-      const now = new Date().toISOString();
-      setShelf((prev) => ({
-        ...prev,
-        [meta.id]: {
-          bookId: meta.id,
-          archived: prev[meta.id]?.archived ?? false,
-          lastReadAt: now,
-          updatedAt: now,
-        },
-      }));
-      updateShelfEntry(meta.id, { markRead: true })
-        .then((entry) => setShelf((prev) => ({ ...prev, [meta.id]: entry })))
-        .catch(console.error);
-      setCurrentBook(book);
+      setCurrentBook(await loadBookData(meta));
     } catch (err) {
       alert(
         `Could not open "${meta.title}".\n${err instanceof Error ? err.message : ""}`,
@@ -180,6 +171,44 @@ export function LibrarySection() {
       setOpeningId(null);
     }
   }, []);
+
+  useEffect(() => {
+    if (!currentBook) return;
+    const { id } = currentBook;
+    const timer = setTimeout(() => {
+      const now = new Date().toISOString();
+      setShelf((prev) => ({
+        ...prev,
+        [id]: {
+          bookId: id,
+          archived: prev[id]?.archived ?? false,
+          lastReadAt: now,
+          updatedAt: now,
+        },
+      }));
+      updateShelfEntry(id, { markRead: true })
+        .then((entry) => setShelf((prev) => ({ ...prev, [id]: entry })))
+        .catch(console.error);
+    }, MARK_READ_AFTER_MS);
+    return () => clearTimeout(timer);
+  }, [currentBook]);
+
+  const removeFromShelf = useCallback(
+    (meta: BookMeta) => {
+      const previous = shelf[meta.id];
+      if (!previous) return;
+      setShelf((prev) => {
+        const next = { ...prev };
+        delete next[meta.id];
+        return next;
+      });
+      removeShelfEntry(meta.id).catch((err: unknown) => {
+        console.error(err);
+        setShelf((prev) => ({ ...prev, [meta.id]: previous }));
+      });
+    },
+    [shelf],
+  );
 
   const toggleArchived = useCallback(
     (meta: BookMeta) => {
@@ -574,6 +603,17 @@ export function LibrarySection() {
                     <Bookmark className="size-4" />
                   )}
                 </button>
+                {tab === "shelf" ? (
+                  <button
+                    type="button"
+                    aria-label={`Remove ${book.title} from your shelf`}
+                    title="Remove from shelf"
+                    onClick={() => removeFromShelf(book)}
+                    className="absolute top-2 right-11 flex size-8 items-center justify-center rounded-lg bg-black/25 text-white opacity-0 backdrop-blur-sm transition-all outline-none hover:bg-black/40 focus-visible:opacity-100 focus-visible:ring-3 focus-visible:ring-white/60 group-hover:opacity-100"
+                  >
+                    <X className="size-4" />
+                  </button>
+                ) : null}
               </div>
             );
           })}

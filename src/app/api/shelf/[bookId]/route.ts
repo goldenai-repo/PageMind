@@ -49,3 +49,17 @@ export async function PATCH(
   await ref.set(update, { merge: true });
   return NextResponse.json({ entry: shelfEntryFromDoc(await ref.get()) });
 }
+
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ bookId: string }> },
+) {
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
+  }
+
+  const { bookId } = await params;
+  await shelfCollection(user.uid).doc(bookId).delete();
+  return NextResponse.json({ ok: true });
+}

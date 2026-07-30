@@ -5,6 +5,7 @@ import {
   type LibraryBook,
   type ShelfEntry,
 } from "./books";
+import { decodeText } from "./readers/decode-text";
 import {
   deleteBookRecord,
   loadCachedBookBytes,
@@ -58,8 +59,13 @@ export async function updateShelfEntry(
   return data.entry;
 }
 
+export async function removeShelfEntry(bookId: string): Promise<void> {
+  const res = await fetch(`/api/shelf/${bookId}`, { method: "DELETE" });
+  await readJson<{ ok: boolean }>(res);
+}
+
 function decodeBookData(meta: BookMeta, bytes: ArrayBuffer): LibraryBook["data"] {
-  if (meta.ext === "txt") return new TextDecoder().decode(bytes);
+  if (meta.ext === "txt") return decodeText(bytes);
   if (meta.ext === "pdf") return bytes;
   return new File([bytes], `${meta.title}.epub`, { type: BOOK_MIME.epub });
 }
