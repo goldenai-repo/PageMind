@@ -3,6 +3,8 @@ export type Paginator = {
   readonly pageCount: number;
   goTo(page: number): void;
   pageForElement(el: Element): number;
+  /** Text of the currently visible page (for tip generation). */
+  getVisibleText(): string;
   /** Re-measure after a content swap and jump to the given page. */
   reset(page?: number): void;
   /** Re-measure after a size/font change, preserving the reading position. */
@@ -100,6 +102,32 @@ export function createPaginator(options: PaginatorOptions): Paginator {
         0,
         Math.min(pageCount - 1, Math.floor((offset + gap / 2) / stride())),
       );
+    },
+    getVisibleText() {
+      const vp = viewport.getBoundingClientRect();
+      const walker = document.createTreeWalker(pager, NodeFilter.SHOW_TEXT);
+      const parts: string[] = [];
+      let node: Node | null;
+      while ((node = walker.nextNode())) {
+        const text = node.textContent;
+        if (!text || !text.trim()) continue;
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        // A text node (e.g. a paragraph) can span multiple columns; include it
+        // if any of its line rects fall within the viewport's visible frame.
+        for (const r of range.getClientRects()) {
+          if (
+            r.right >= vp.left &&
+            r.left <= vp.right &&
+            r.bottom >= vp.top &&
+            r.top <= vp.bottom
+          ) {
+            parts.push(text);
+            break;
+          }
+        }
+      }
+      return parts.join(" ").replace(/\s+/g, " ").trim();
     },
     reset,
     reflow,

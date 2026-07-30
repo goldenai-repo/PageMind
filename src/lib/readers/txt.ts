@@ -99,6 +99,10 @@ export function mountTxtReader(options: TxtMountOptions): ReaderRendition {
         showSection(sectionIdx + 1);
       }
     },
+    getContext: () => ({
+      text: paginator.getVisibleText(),
+      pageNumber: paginator.page + 1,
+    }),
     themes: {
       fontSize(px: string) {
         pagerEl.style.fontSize = px;

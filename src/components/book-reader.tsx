@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ChevronLeft, List, X } from "lucide-react";
+import { ChevronLeft, Lightbulb, List, Sparkles, Trash2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import type { LibraryBook } from "@/lib/books";
@@ -9,7 +9,23 @@ import { mountEpubReader } from "@/lib/readers/epub-engine";
 import { mountPdfReader } from "@/lib/readers/pdf";
 import { mountTxtReader } from "@/lib/readers/txt";
 import type { ReaderNavState, ReaderRendition } from "@/lib/readers/types";
+import {
+  deleteTip,
+  loadTipsForBook,
+  saveTip,
+  TIP_TYPES,
+  type TipCard,
+  type TipType,
+} from "@/lib/tips";
 import { cn } from "@/lib/utils";
+
+type GeneratedTip = {
+  type: TipType;
+  title: string;
+  body: string;
+  anchorText: string;
+  references: { label: string; url: string }[];
+};
 
 type BookReaderProps = {
   book: LibraryBook;
@@ -33,6 +49,82 @@ export function BookReader({ book, onClose }: BookReaderProps) {
     canNext: false,
     pageLabel: "",
   });
+
+  const [tips, setTips] = useState<TipCard[]>([]);
+  const [tipsOpen, setTipsOpen] = useState(false);
+  const [tipsLoading, setTipsLoading] = useState(false);
+  const [tipsError, setTipsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadTipsForBook(book.id)
+      .then((loaded) => {
+        if (cancelled) return;
+        setTips(loaded);
+        setTipsError(null);
+      })
+      .catch(console.error);
+    return () => {
+      cancelled = true;
+    };
+  }, [book.id]);
+
+  const generateTips = async () => {
+    const rendition = renditionRef.current;
+    if (!rendition) return;
+    setTipsLoading(true);
+    setTipsError(null);
+    try {
+      const context = await rendition.getContext();
+      if (!context.text.trim()) {
+        setTipsError("No readable text on this page yet.");
+        return;
+      }
+      const res = await fetch("/api/tips/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bookTitle: book.title, context }),
+      });
+      const data = (await res.json()) as {
+        tips?: GeneratedTip[];
+        error?: string;
+      };
+      if (!res.ok) throw new Error(data.error ?? "Failed to generate tips.");
+
+      const now = new Date().toISOString();
+      const generated = data.tips ?? [];
+      const newTips: TipCard[] = generated.map((t) => ({
+        id: `${Date.now()}_${Math.random().toString(36).slice(2)}`,
+        bookId: book.id,
+        anchor: {
+          text: t.anchorText,
+          chapterHref: context.chapterHref,
+          pageNumber: context.pageNumber,
+        },
+        type: t.type,
+        title: t.title,
+        body: t.body,
+        references: t.references,
+        source: "ai",
+        createdAt: now,
+      }));
+
+      for (const tip of newTips) await saveTip(tip);
+      setTips((prev) => [...prev, ...newTips]);
+      if (newTips.length === 0) {
+        setTipsError("No tips found for this page.");
+      }
+    } catch (e) {
+      setTipsError(e instanceof Error ? e.message : "Failed to generate tips.");
+    } finally {
+      setTipsLoading(false);
+    }
+  };
+
+  const removeTip = async (id: string) => {
+    await deleteTip(id);
+    setTips((prev) => prev.filter((t) => t.id !== id));
+  };
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -174,6 +266,25 @@ export function BookReader({ book, onClose }: BookReaderProps) {
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            title="Tips"
+            aria-pressed={tipsOpen}
+            onClick={() => setTipsOpen((v) => !v)}
+            className={cn(
+              "relative rounded-md border-border bg-[#f0f2f5]",
+              tipsOpen && "border-navy bg-navy/10 text-navy",
+            )}
+          >
+            <Lightbulb className="size-3.5" />
+            {tips.length > 0 ? (
+              <span className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-navy px-1 text-[0.6rem] font-bold text-white">
+                {tips.length}
+              </span>
+            ) : null}
+          </Button>
           {showEpubChrome ? (
             <Button
               type="button"
@@ -310,6 +421,108 @@ export function BookReader({ book, onClose }: BookReaderProps) {
             </Button>
           </div>
         </div>
+
+        <aside
+          className={cn(
+            "flex shrink-0 flex-col overflow-hidden border-l border-border bg-[#f5f7fb] transition-[width] duration-200",
+            tipsOpen ? "w-[320px]" : "w-0 border-l-0",
+          )}
+          aria-label="Tips"
+        >
+          <div className="flex shrink-0 items-center justify-between border-b border-border bg-white px-3 py-3 text-[0.72rem] font-bold tracking-wider text-navy uppercase">
+            <span className="px-1">Tips</span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              aria-label="Close tips"
+              onClick={() => setTipsOpen(false)}
+              className="text-muted-foreground"
+            >
+              <X className="size-3.5" />
+            </Button>
+          </div>
+
+          <div className="shrink-0 border-b border-border p-3">
+            <Button
+              type="button"
+              size="sm"
+              onClick={generateTips}
+              disabled={tipsLoading}
+              className="w-full gap-1.5 rounded-md font-semibold"
+            >
+              <Sparkles className="size-3.5" />
+              {tipsLoading ? "Generating…" : "Generate tips for this page"}
+            </Button>
+            {tipsError ? (
+              <p className="mt-2 text-[0.76rem] text-destructive">{tipsError}</p>
+            ) : null}
+          </div>
+
+          <div className="flex-1 space-y-3 overflow-y-auto p-3">
+            {tips.length === 0 && !tipsLoading ? (
+              <p className="px-1 pt-6 text-center text-[0.8rem] leading-relaxed text-muted-foreground">
+                No tips yet. Generate context, background, and controversies for
+                the passage you&apos;re reading.
+              </p>
+            ) : null}
+            {tips.map((tip) => {
+              const meta = TIP_TYPES[tip.type];
+              return (
+                <div
+                  key={tip.id}
+                  className="group rounded-lg border border-border bg-white p-3 shadow-[0_2px_10px_rgba(27,54,93,0.06)]"
+                  style={{ borderLeft: `4px solid ${meta.color}` }}
+                >
+                  <div className="flex items-center justify-between">
+                    <span
+                      className="text-[0.62rem] font-bold tracking-wider uppercase"
+                      style={{ color: meta.color }}
+                    >
+                      {meta.icon} {meta.label}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label="Delete tip"
+                      onClick={() => void removeTip(tip.id)}
+                      className="text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </div>
+                  <p className="mt-1 text-[0.9rem] leading-snug font-semibold text-foreground">
+                    {tip.title}
+                  </p>
+                  <p className="mt-1 text-[0.82rem] leading-relaxed text-[#55617a]">
+                    {tip.body}
+                  </p>
+                  {tip.anchor.text ? (
+                    <p className="mt-2 border-l-2 border-border pl-2 text-[0.74rem] text-muted-foreground italic">
+                      “{tip.anchor.text}”
+                    </p>
+                  ) : null}
+                  {tip.references && tip.references.length > 0 ? (
+                    <div className="mt-2 flex flex-col gap-1">
+                      {tip.references.map((ref, i) => (
+                        <a
+                          key={i}
+                          href={ref.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="truncate text-[0.76rem] font-medium text-navy hover:underline"
+                        >
+                          📎 {ref.label}
+                        </a>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </aside>
       </div>
     </div>
   );

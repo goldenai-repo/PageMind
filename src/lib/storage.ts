@@ -1,16 +1,24 @@
 import type { LibraryBook } from "./books";
 
 const DB_NAME = "pagemind";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE = "books";
+export const TIPS_STORE = "tips";
 
 type StoredBook = Omit<LibraryBook, "addedAt"> & { addedAt: string };
 
-function openDB(): Promise<IDBDatabase> {
+export function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
-      req.result.createObjectStore(STORE, { keyPath: "id" });
+      const db = req.result;
+      if (!db.objectStoreNames.contains(STORE)) {
+        db.createObjectStore(STORE, { keyPath: "id" });
+      }
+      if (!db.objectStoreNames.contains(TIPS_STORE)) {
+        const tips = db.createObjectStore(TIPS_STORE, { keyPath: "id" });
+        tips.createIndex("bookId", "bookId", { unique: false });
+      }
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);

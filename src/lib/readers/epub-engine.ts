@@ -340,6 +340,10 @@ export async function mountEpubReader(
         await displayItem(currentIdx + 1);
       }
     },
+    getContext: () => ({
+      text: paginator.getVisibleText(),
+      chapterHref: spine[currentIdx].href,
+    }),
     themes: {
       fontSize(px: string) {
         viewerEl.style.fontSize = px;
