@@ -33,8 +33,24 @@ type ShelfDoc = {
   updatedAt?: string;
 };
 
+/** Firestore doc shape for `books/{id}/tips/{tipId}` (pre-authored tip cards). */
+export type TipDoc = {
+  type: string;
+  title: string;
+  body: string;
+  anchorText: string;
+  chapterHref?: string;
+  pageNumber?: number;
+  references: { label: string; url: string }[];
+  order: number;
+};
+
 export function booksCollection(): CollectionReference {
   return getAdminFirestore().collection("books");
+}
+
+export function tipsCollection(bookId: string): CollectionReference {
+  return booksCollection().doc(bookId).collection("tips");
 }
 
 export function shelfCollection(uid: string): CollectionReference {

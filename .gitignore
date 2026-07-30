@@ -44,3 +44,6 @@ next-env.d.ts
 # pagemind local
 .claude/
 *.epub
+
+# Book text extracted for tip authoring (copyrighted content)
+scripts/exported/

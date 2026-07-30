@@ -12,7 +12,7 @@ import {
   loadLegacyBooks,
   saveCachedBookBytes,
 } from "./storage";
-import { loadTipsForBook, saveTip } from "./tips";
+import type { TipCard } from "./tips";
 
 async function readJson<T>(res: Response): Promise<T> {
   const data = (await res.json().catch(() => ({}))) as T & { error?: string };
@@ -30,6 +30,12 @@ export async function fetchLibrary(): Promise<BookMeta[]> {
   const res = await fetch("/api/books");
   const data = await readJson<{ books: BookMetaJson[] }>(res);
   return data.books.map(toMeta);
+}
+
+export async function fetchTipsForBook(bookId: string): Promise<TipCard[]> {
+  const res = await fetch(`/api/tips/${bookId}`);
+  const data = await readJson<{ tips: TipCard[] }>(res);
+  return data.tips;
 }
 
 export async function uploadBook(file: File): Promise<BookMeta> {
@@ -96,8 +102,8 @@ function legacyBookToFile(book: LibraryBook): File {
 
 /**
  * One-time migration: upload books saved in this browser before the shared
- * library existed, re-link their tips to the new server ids, then drop the
- * local copies. Returns the uploaded books' metadata.
+ * library existed, then drop the local copies. Returns the uploaded books'
+ * metadata.
  */
 export async function migrateLocalBooks(): Promise<BookMeta[]> {
   const legacy = await loadLegacyBooks();
@@ -105,11 +111,6 @@ export async function migrateLocalBooks(): Promise<BookMeta[]> {
   for (const book of legacy) {
     try {
       const meta = await uploadBook(legacyBookToFile(book));
-      const tips = await loadTipsForBook(book.id);
-      // Same tip id, so put() replaces the old record in place.
-      for (const tip of tips) {
-        await saveTip({ ...tip, bookId: meta.id });
-      }
       await deleteBookRecord(book.id);
       uploaded.push(meta);
     } catch (error) {
