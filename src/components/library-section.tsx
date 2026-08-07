@@ -1,10 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BookOpen, MoreHorizontal } from "lucide-react";
+import { BookOpen } from "lucide-react";
 
+import { BookCard, type BookCardMenuItem } from "@/components/book-card";
 import { BookReader } from "@/components/book-reader";
-import { StarRating } from "@/components/star-rating";
 import {
   isInMyLibrary,
   removeFromMyLibrary,
@@ -14,10 +14,29 @@ import {
   type LibraryShelf,
   type ReadingProgressUpdate,
 } from "@/lib/books";
+import { extractCoverImage } from "@/lib/cover";
 import { loadBooks, saveBook } from "@/lib/storage";
 
 function bookStatus(book: LibraryBook): BookStatus | undefined {
   return book.status;
+}
+
+/** Fill coverImage for older books that only have a gradient. */
+async function backfillCovers(
+  userId: string,
+  books: LibraryBook[],
+  setBooks: React.Dispatch<React.SetStateAction<LibraryBook[]>>,
+) {
+  for (const book of books) {
+    if (book.coverImage) continue;
+    const coverImage = await extractCoverImage(book.data, book.ext, {
+      title: book.title,
+    });
+    if (!coverImage) continue;
+    const updated = { ...book, coverImage };
+    setBooks((prev) => prev.map((b) => (b.id === book.id ? updated : b)));
+    void saveBook(userId, updated);
+  }
 }
 
 function matchesShelf(book: LibraryBook, shelf: LibraryShelf) {
@@ -50,7 +69,9 @@ export function LibrarySection({
     let cancelled = false;
     loadBooks(userId)
       .then((loaded) => {
-        if (!cancelled) setBooks(loaded);
+        if (cancelled) return;
+        setBooks(loaded);
+        void backfillCovers(userId, loaded, setBooks);
       })
       .catch(console.error);
     return () => {
@@ -119,9 +140,7 @@ export function LibrarySection({
     [currentBookId, userId],
   );
 
-  const setRating = (book: LibraryBook, rating: BookRating) => {
-    updateBook(book, { rating });
-  };
+  const isStore = shelf === "store";
 
   if (visibleBooks.length === 0) {
     const emptyLabel =
@@ -138,196 +157,92 @@ export function LibrarySection({
     );
   }
 
-  const isStore = shelf === "store";
-
   return (
     <>
       <div
-        className="grid grid-cols-[repeat(auto-fill,minmax(176px,1fr))] gap-x-6 gap-y-8"
+        className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-x-5 gap-y-8 sm:grid-cols-[repeat(auto-fill,minmax(156px,1fr))]"
         role="list"
         aria-label="Book collection"
       >
         {visibleBooks.map((book) => {
           const saved = isInMyLibrary(book);
-          const percent = book.progressPercent ?? 0;
-          const showProgress = Boolean(book.lastOpenedAt) || percent > 0;
-          const rating = (book.rating ?? 0) as BookRating;
+
+          const menuItems: BookCardMenuItem[] = isStore
+            ? [
+                ...(!saved
+                  ? [
+                      {
+                        label: "Add to My Books",
+                        onSelect: () =>
+                          updateBook(book, { inMyLibrary: true }),
+                      },
+                    ]
+                  : []),
+                {
+                  label: book.favorite
+                    ? "Remove Favorite"
+                    : "Add to Favorite",
+                  onSelect: () =>
+                    updateBook(book, {
+                      favorite: !book.favorite,
+                      ...(book.favorite ? {} : { inMyLibrary: true }),
+                    }),
+                },
+                {
+                  label: "Add to Want to Read",
+                  onSelect: () =>
+                    updateBook(book, {
+                      status: "want",
+                      inMyLibrary: true,
+                    }),
+                },
+              ]
+            : [
+                {
+                  label: book.favorite
+                    ? "Remove Favorite"
+                    : "Add to Favorite",
+                  onSelect: () =>
+                    updateBook(book, {
+                      favorite: !book.favorite,
+                      ...(book.favorite ? {} : { inMyLibrary: true }),
+                    }),
+                },
+                {
+                  label: "Want to Read",
+                  onSelect: () =>
+                    updateBook(book, {
+                      status: "want",
+                      inMyLibrary: true,
+                    }),
+                },
+                {
+                  label: "Delete",
+                  danger: true,
+                  onSelect: () =>
+                    updateBook(book, removeFromMyLibrary(book)),
+                },
+              ];
 
           return (
-            <div
+            <BookCard
               key={book.id}
-              className="relative flex flex-col"
-              role="listitem"
-            >
-              <button
-                type="button"
-                onClick={() => openBook(book)}
-                className="group relative flex h-[210px] w-full items-center justify-center overflow-hidden rounded-xl shadow-[0_2px_10px_rgba(27,54,93,0.07)] outline-none transition-all hover:-translate-y-1.5 hover:shadow-[0_12px_30px_rgba(27,54,93,0.15)] focus-visible:ring-3 focus-visible:ring-navy/25"
-                style={{ background: book.cover }}
-                aria-label={`${book.title} — ${book.ext.toUpperCase()}`}
-              >
-                <div className="absolute inset-y-0 left-0 w-[13px] border-r border-white/10 bg-black/20" />
-                <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.14)_0%,transparent_55%)]" />
-                <BookOpen className="size-10 text-white opacity-40" />
-                {book.favorite ? (
-                  <span className="absolute top-2.5 left-3 rounded bg-black/30 px-1.5 py-0.5 text-[0.63rem] font-bold tracking-wider text-white/90 backdrop-blur-sm">
-                    ★
-                  </span>
-                ) : null}
-                <span className="absolute right-2.5 bottom-2.5 rounded bg-black/30 px-1.5 py-0.5 text-[0.63rem] font-bold tracking-wider text-white/90 backdrop-blur-sm">
-                  {book.ext.toUpperCase()}
-                </span>
-              </button>
-
-              <p
-                className="mt-2 line-clamp-2 px-0.5 text-[0.875rem] leading-snug font-semibold text-foreground"
-                title={book.title}
-              >
-                {book.title}
-              </p>
-
-              <div className="mt-1.5 flex items-center gap-2 px-0.5">
-                {showProgress ? (
-                  <>
-                    <span className="w-8 shrink-0 text-[0.7rem] tabular-nums text-muted-foreground">
-                      {percent}%
-                    </span>
-                    <div
-                      className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-muted"
-                      role="progressbar"
-                      aria-valuenow={percent}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                      aria-label={`${book.title} reading progress`}
-                    >
-                      <div
-                        className="h-full rounded-full bg-navy transition-[width]"
-                        style={{ width: `${percent}%` }}
-                      />
-                    </div>
-                  </>
-                ) : (
-                  <div className="min-w-0 flex-1" aria-hidden />
-                )}
-
-                <div className="relative shrink-0">
-                  <button
-                    type="button"
-                    aria-label={`Options for ${book.title}`}
-                    aria-expanded={menuOpenId === book.id}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setMenuOpenId((id) => (id === book.id ? null : book.id));
-                    }}
-                    className="flex size-6 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-navy"
-                  >
-                    <MoreHorizontal className="size-4" />
-                  </button>
-                  {menuOpenId === book.id ? (
-                    <div
-                      className="absolute top-full right-0 z-20 mt-1 min-w-48 overflow-hidden rounded-[6px] border border-border bg-white py-1 shadow-[0_8px_24px_rgba(27,54,93,0.12)]"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {isStore ? (
-                        <>
-                          {!saved ? (
-                            <button
-                              type="button"
-                              className="block w-full px-3 py-1.5 text-left text-[0.82rem] font-medium text-foreground hover:bg-muted"
-                              onClick={() =>
-                                updateBook(book, { inMyLibrary: true })
-                              }
-                            >
-                              Add to My Books
-                            </button>
-                          ) : null}
-                          <button
-                            type="button"
-                            className="block w-full px-3 py-1.5 text-left text-[0.82rem] font-medium text-foreground hover:bg-muted"
-                            onClick={() =>
-                              updateBook(book, {
-                                favorite: !book.favorite,
-                                ...(book.favorite
-                                  ? {}
-                                  : { inMyLibrary: true }),
-                              })
-                            }
-                          >
-                            {book.favorite
-                              ? "Remove Favorite"
-                              : "Add to Favorite"}
-                          </button>
-                          <button
-                            type="button"
-                            className="block w-full px-3 py-1.5 text-left text-[0.82rem] font-medium text-foreground hover:bg-muted"
-                            onClick={() =>
-                              updateBook(book, {
-                                status: "want",
-                                inMyLibrary: true,
-                              })
-                            }
-                          >
-                            Add to Want to Read
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button
-                            type="button"
-                            className="block w-full px-3 py-1.5 text-left text-[0.82rem] font-medium text-foreground hover:bg-muted"
-                            onClick={() =>
-                              updateBook(book, {
-                                favorite: !book.favorite,
-                                ...(book.favorite
-                                  ? {}
-                                  : { inMyLibrary: true }),
-                              })
-                            }
-                          >
-                            {book.favorite
-                              ? "Remove Favorite"
-                              : "Add to Favorite"}
-                          </button>
-                          <button
-                            type="button"
-                            className="block w-full px-3 py-1.5 text-left text-[0.82rem] font-medium text-foreground hover:bg-muted"
-                            onClick={() =>
-                              updateBook(book, {
-                                status: "want",
-                                inMyLibrary: true,
-                              })
-                            }
-                          >
-                            Want to Read
-                          </button>
-                          <button
-                            type="button"
-                            className="block w-full px-3 py-1.5 text-left text-[0.82rem] font-medium text-red-600 hover:bg-muted"
-                            onClick={() =>
-                              updateBook(book, removeFromMyLibrary(book))
-                            }
-                          >
-                            Delete
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="mt-1.5 px-0.5">
-                {isStore ? (
-                  <StarRating value={rating} label="Average rating" />
-                ) : (
-                  <StarRating
-                    value={rating}
-                    onChange={(next) => setRating(book, next)}
-                    label="Your rating"
-                  />
-                )}
-              </div>
-            </div>
+              book={book}
+              onOpen={() => openBook(book)}
+              showProgress
+              showRating
+              // Same StarRating look on all shelves; only My Library shelves rate.
+              onRate={
+                isStore
+                  ? undefined
+                  : (rating: BookRating) => updateBook(book, { rating })
+              }
+              menuOpen={menuOpenId === book.id}
+              onMenuOpenChange={(open) =>
+                setMenuOpenId(open ? book.id : null)
+              }
+              menuItems={menuItems}
+            />
           );
         })}
       </div>

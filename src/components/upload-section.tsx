@@ -1,23 +1,41 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BookOpen, Plus, Search, Upload } from "lucide-react";
+import { Plus, Search, Upload } from "lucide-react";
 
 import { BookReader } from "@/components/book-reader";
+import { BookCard } from "@/components/book-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   COVERS,
-  formatDate,
   formatSize,
   type BookExt,
   type LibraryBook,
 } from "@/lib/books";
+import { extractCoverImage } from "@/lib/cover";
 import { loadBooks, saveBook } from "@/lib/storage";
 import { cn } from "@/lib/utils";
 
 function hasFiles(e: DragEvent | React.DragEvent) {
   return Array.from(e.dataTransfer?.types ?? []).includes("Files");
+}
+
+async function backfillCovers(
+  userId: string,
+  books: LibraryBook[],
+  setBooks: React.Dispatch<React.SetStateAction<LibraryBook[]>>,
+) {
+  for (const book of books) {
+    if (book.coverImage) continue;
+    const coverImage = await extractCoverImage(book.data, book.ext, {
+      title: book.title,
+    });
+    if (!coverImage) continue;
+    const updated = { ...book, coverImage };
+    setBooks((prev) => prev.map((b) => (b.id === book.id ? updated : b)));
+    void saveBook(userId, updated);
+  }
 }
 
 type SortKey = "recent" | "title";
@@ -49,7 +67,9 @@ export function UploadSection({ userId }: { userId: string }) {
     let cancelled = false;
     loadBooks(userId)
       .then((loaded) => {
-        if (!cancelled) setBooks(loaded);
+        if (cancelled) return;
+        setBooks(loaded);
+        void backfillCovers(userId, loaded, setBooks);
       })
       .catch(console.error);
     return () => {
@@ -71,13 +91,20 @@ export function UploadSection({ userId }: { userId: string }) {
         return;
       }
 
-      const pushBook = (data: LibraryBook["data"]) => {
+      const pushBook = async (data: LibraryBook["data"]) => {
+        const bookExt = ext as BookExt;
+        const coverImage = await extractCoverImage(
+          bookExt === "epub" ? file : data,
+          bookExt,
+          { title: file.name.replace(/\.[^/.]+$/, "") },
+        );
         const book: LibraryBook = {
           id: `${Date.now()}_${Math.random().toString(36).slice(2)}`,
           title: file.name.replace(/\.[^/.]+$/, ""),
-          ext: ext as BookExt,
+          ext: bookExt,
           data,
           cover: COVERS[booksRef.current.length % COVERS.length],
+          coverImage: coverImage ?? null,
           size: formatSize(file.size),
           addedAt: new Date(),
         };
@@ -87,14 +114,14 @@ export function UploadSection({ userId }: { userId: string }) {
 
       // EPUB: keep the raw File — JSZip reads it at open time (legacy behavior).
       if (ext === "epub") {
-        pushBook(file);
+        void pushBook(file);
         return;
       }
 
       const reader = new FileReader();
       reader.onload = (ev) => {
         if (ev.target?.result != null) {
-          pushBook(ev.target.result as string | ArrayBuffer);
+          void pushBook(ev.target.result as string | ArrayBuffer);
         }
       };
       if (ext === "txt") reader.readAsText(file);
@@ -324,42 +351,16 @@ export function UploadSection({ userId }: { userId: string }) {
         </div>
       ) : (
         <div
-          className="grid grid-cols-[repeat(auto-fill,minmax(176px,1fr))] gap-6"
+          className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-x-5 gap-y-8 sm:grid-cols-[repeat(auto-fill,minmax(156px,1fr))]"
           role="list"
           aria-label="Book collection"
         >
           {visibleBooks.map((book) => (
-            <button
+            <BookCard
               key={book.id}
-              type="button"
-              role="listitem"
-              aria-label={`${book.title} — ${book.ext.toUpperCase()}`}
-              onClick={() => openBook(book)}
-              className="group flex flex-col overflow-hidden rounded-xl bg-card text-left shadow-[0_2px_10px_rgba(27,54,93,0.07)] outline-none transition-all hover:-translate-y-1.5 hover:shadow-[0_12px_30px_rgba(27,54,93,0.15)] focus-visible:ring-3 focus-visible:ring-navy/25"
-            >
-              <div
-                className="relative flex h-[210px] shrink-0 items-center justify-center overflow-hidden"
-                style={{ background: book.cover }}
-              >
-                <div className="absolute inset-y-0 left-0 w-[13px] border-r border-white/10 bg-black/20" />
-                <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.14)_0%,transparent_55%)]" />
-                <BookOpen className="size-10 text-white opacity-40" />
-                <span className="absolute right-2.5 bottom-2.5 rounded bg-black/30 px-1.5 py-0.5 text-[0.63rem] font-bold tracking-wider text-white/90 backdrop-blur-sm">
-                  {book.ext.toUpperCase()}
-                </span>
-              </div>
-              <div className="flex flex-1 flex-col gap-1 px-3.5 pt-3 pb-3.5">
-                <p
-                  className="line-clamp-2 text-[0.875rem] leading-snug font-semibold text-foreground"
-                  title={book.title}
-                >
-                  {book.title}
-                </p>
-                <p className="truncate text-[0.72rem] text-muted-foreground">
-                  {book.size} · {formatDate(book.addedAt)}
-                </p>
-              </div>
-            </button>
+              book={book}
+              onOpen={() => openBook(book)}
+            />
           ))}
         </div>
       )}

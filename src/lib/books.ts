@@ -45,7 +45,10 @@ export type LibraryBook = {
   id: string;
   title: string;
   ext: BookExt;
+  /** CSS gradient fallback when no cover image */
   cover: string;
+  /** Extracted cover thumbnail (EPUB/PDF); shown on shelf cards */
+  coverImage?: Blob | null;
   size: string;
   addedAt: Date;
   /** File for EPUB; ArrayBuffer for PDF; string for TXT */

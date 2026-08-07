@@ -1,9 +1,10 @@
 # Design Doc - PageMind Bookshelf (收藏 · 进度 · 评分)
 
 **Author:** Coco  
-**Version:** 1.1  
-**Date:** 2026-07-22  
-**Branch:** `feat/user-library`
+**Version:** 1.2  
+**Date:** 2026-08-07  
+**Branch:** `feat/user-library`  
+**Change in 1.2:** Rename Phase 1 storage APIs for clarity (pending code rename after approval).
 
 ---
 
@@ -170,31 +171,131 @@ Phase 2: ~5 GB on Firebase Storage for the 1k-book target.
 
 ## API
 
+> **Status:** naming proposal — **do not rename code until approved**.
+> Design doc language: English only. Bilingual explanations happen in chat when needed.
+
+### Why Phase 1 functions take `userId`
+
+Phase 1 stores books in browser IndexedDB named `pagemind_{userId}`.  
+`userId` selects which user’s local database to open — not “filter by author.”  
+Phase 2 HTTP APIs take identity from the auth session instead (no `userId` in the path).
+
+---
+
+### Rename map (old → proposed)
+
+| Old name (current code) | New name (proposed) |
+|---|---|
+| `loadBooks` | `listAllBooks` |
+| `saveBook` | `putBook` |
+| `deleteBook` | `deleteUploadedBook` *(internal only; not exposed in UI)* |
+| `setLibraryMembership` | split → `addToMyBooks` / `removeFromMyBooks` |
+| `setFavorite` | `setBookFavorite` |
+| `setRating` | `setBookRating` |
+| `updateProgress` | `updateReadingProgress` |
+| *(new)* | `setBookStatus` — Want to Read / Finished |
+| private `getBook` | `getBookById` (optional export) |
+
+**Note on two confusing names (revised):**
+- Avoided `listUploadedBooks` → use **`listAllBooks`** (matches the UI label “All Books”).
+- Avoided `upsertBook` (“upsert” is DB jargon) → use **`putBook`** (write/replace one full book record).
+
+---
+
 ### Phase 1 — local module API (`src/lib/storage.ts`)
 
-| API | Behavior |
+#### 1. `listAllBooks(userId): Promise<LibraryBook[]>`
+
+Returns every book in this user’s local catalog — what the **All Books** page shows.
+
+- Includes books that are only uploaded and not yet in My Books.
+- Does **not** filter by favorite / want / finished (the UI filters after loading, or a later helper can).
+- Phase 1 each item still includes file bytes + user-state fields on the same record.
+
+#### 2. `putBook(userId, book): Promise<void>`
+
+Writes **one full book record** into IndexedDB.
+
+- If `book.id` is new → creates the record (this is what **Upload** does).
+- If `book.id` already exists → replaces the whole record with the new object.
+- This is a **storage write primitive**, not a product action like “Want to Read” or “Favorite.”
+- Higher-level helpers (`addToMyBooks`, `setBookFavorite`, …) load a book, change fields, then call `putBook`.
+
+#### 3. `getBookById(userId, bookId): Promise<LibraryBook | null>`
+
+Fetch a single book by id. Returns `null` if it does not exist.
+
+#### 4. `addToMyBooks(userId, bookId): Promise<LibraryBook | null>`
+
+Sets `inMyLibrary = true` so the book appears under **My Books**.  
+Also used when the user opens a book from All Books.
+
+#### 5. `removeFromMyBooks(userId, bookId): Promise<LibraryBook | null>`
+
+User-facing **Delete** on My Books: clears `inMyLibrary` / favorite / status.  
+**Keeps** the file in the catalog → book still appears in **All Books**.  
+Not a permanent file delete.
+
+#### 6. `setBookFavorite(userId, bookId, favorite: boolean): Promise<LibraryBook | null>`
+
+Turns favorite on or off. When favoring, also sets `inMyLibrary = true`.
+
+#### 7. `setBookRating(userId, bookId, rating: 0|1|2|3|4|5): Promise<LibraryBook | null>`
+
+Sets the user’s personal star rating (`0` = unrated / cleared).
+
+#### 8. `setBookStatus(userId, bookId, status: "want" | "finished" | null): Promise<LibraryBook | null>`
+
+Sets Want to Read / Finished / clear. Also ensures `inMyLibrary = true` when status is set.
+
+#### 9. `updateReadingProgress(userId, bookId, progress): Promise<LibraryBook | null>`
+
+Persists reading progress: `lastReadPage`, `totalPages`, `progressPercent`, `locator`, `lastOpenedAt`.  
+Also sets `inMyLibrary = true`; at 100% may set `status = "finished"`.
+
+#### 10. `deleteUploadedBook(userId, bookId): Promise<void>` *(internal only — no UI)*
+
+Permanently removes the catalog row and file bytes from IndexedDB.  
+Not offered in the bookshelf UI (users cannot delete from All Books).
+
+---
+
+### Phase 1 call cheat-sheet (product action → API)
+
+| User action | API |
 |---|---|
-| `loadBooks(userId)` | List all uploads (All Books) |
-| `saveBook(userId, book)` | Upsert full record |
-| `setLibraryMembership(userId, bookId, inLibrary)` | Add/remove My Books (**Delete** = `false`) |
-| `setFavorite(userId, bookId, favorite)` | Toggle favorite |
-| `setRating(userId, bookId, rating)` | Set 0–5 |
-| `updateProgress(userId, bookId, progress)` | Save page / % / locator |
+| Upload file | `putBook` (new record, `inMyLibrary: false`) |
+| Open All Books page | `listAllBooks` |
+| Add to My Books | `addToMyBooks` |
+| Delete from My Books | `removeFromMyBooks` |
+| Favorite / unfavorite | `setBookFavorite` |
+| Rate stars | `setBookRating` |
+| Want to Read | `setBookStatus(..., "want")` |
+| Mark Finished | `setBookStatus(..., "finished")` |
+| Turn pages while reading | `updateReadingProgress` |
 
-No catalog delete API.
+---
 
-### Phase 2 — HTTP (future)
+### Phase 2 — HTTP (future; aligned names)
 
-| Method | Path | Notes |
+Auth user comes from session cookie — no `userId` in path.
+
+| Method | Path | Maps to Phase 1 idea |
 |---|---|---|
-| `GET` | `/api/books` | All Books |
-| `POST` | `/api/books` | Create after Storage upload |
-| `GET` | `/api/library?shelf=` | My Library shelves |
-| `PUT` | `/api/library/:bookId` | favorite / inLibrary / rating |
-| `DELETE` | `/api/library/:bookId` | Remove from My Books only |
-| `PATCH` | `/api/library/:bookId/progress` | Progress update |
+| `GET` | `/api/books` | `listAllBooks` |
+| `POST` | `/api/books` | create catalog after Storage upload (`putBook` create path) |
+| `GET` | `/api/books/:bookId` | `getBookById` |
+| `GET` | `/api/library?shelf=mine\|favorite\|want\|finished` | filtered My Library lists |
+| `POST` | `/api/library/:bookId` | `addToMyBooks` |
+| `DELETE` | `/api/library/:bookId` | `removeFromMyBooks` |
+| `PUT` | `/api/library/:bookId/favorite` | `setBookFavorite` |
+| `PUT` | `/api/library/:bookId/rating` | `setBookRating` |
+| `PUT` | `/api/library/:bookId/status` | `setBookStatus` |
+| `PATCH` | `/api/library/:bookId/progress` | `updateReadingProgress` |
 
-### Reader hook
+No `DELETE /api/books/:id` in product scope.
+
+### Reader hook (unchanged conceptually)
 
 ```ts
 onProgress?: (p: {
@@ -204,6 +305,8 @@ onProgress?: (p: {
   locator: ReadingLocator;
 }) => void;
 ```
+
+Reader calls parent → parent calls `updateReadingProgress`.
 
 ---
 
