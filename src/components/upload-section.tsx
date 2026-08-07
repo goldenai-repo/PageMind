@@ -14,7 +14,7 @@ import {
   type LibraryBook,
 } from "@/lib/books";
 import { extractCoverImage } from "@/lib/cover";
-import { loadBooks, saveBook } from "@/lib/storage";
+import { deleteBook, loadBooks, saveBook } from "@/lib/storage";
 import { cn } from "@/lib/utils";
 
 function hasFiles(e: DragEvent | React.DragEvent) {
@@ -45,11 +45,19 @@ export function UploadSection({ userId }: { userId: string }) {
   const [currentBook, setCurrentBook] = useState<LibraryBook | null>(null);
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("recent");
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const booksRef = useRef(books);
 
   useEffect(() => {
     booksRef.current = books;
   }, [books]);
+
+  useEffect(() => {
+    if (!menuOpenId) return;
+    const close = () => setMenuOpenId(null);
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
+  }, [menuOpenId]);
 
   const visibleBooks = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -149,6 +157,14 @@ export function UploadSection({ userId }: { userId: string }) {
     setBooks((prev) => prev.map((b) => (b.id === book.id ? updated : b)));
     void saveBook(userId, updated);
     setCurrentBook(updated);
+  };
+
+  /** Temporary: permanently remove upload from IndexedDB (dev/test helper). */
+  const removeUploadedBook = (book: LibraryBook) => {
+    setMenuOpenId(null);
+    setBooks((prev) => prev.filter((b) => b.id !== book.id));
+    if (currentBook?.id === book.id) setCurrentBook(null);
+    void deleteBook(userId, book.id);
   };
 
   useEffect(() => {
@@ -360,6 +376,17 @@ export function UploadSection({ userId }: { userId: string }) {
               key={book.id}
               book={book}
               onOpen={() => openBook(book)}
+              menuOpen={menuOpenId === book.id}
+              onMenuOpenChange={(open) =>
+                setMenuOpenId(open ? book.id : null)
+              }
+              menuItems={[
+                {
+                  label: "Delete upload",
+                  danger: true,
+                  onSelect: () => removeUploadedBook(book),
+                },
+              ]}
             />
           ))}
         </div>
