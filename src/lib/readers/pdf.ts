@@ -1,10 +1,20 @@
-import type { ReaderNavState, ReaderRendition } from "./types";
+import { computeProgressPercent } from "@/lib/books";
+
+import type {
+  ReaderNavState,
+  ReaderRendition,
+  ReaderTocItem,
+} from "./types";
 
 export type PdfMountOptions = {
   data: ArrayBuffer;
   contentEl: HTMLElement;
   signal?: AbortSignal;
+  /** 1-based page to open on mount (clamped). */
+  initialPage?: number;
   onNavChange?: (state: ReaderNavState) => void;
+  onToc?: (items: ReaderTocItem[]) => void;
+  onTocActive?: (id: string | null) => void;
 };
 
 /**
@@ -15,7 +25,7 @@ export type PdfMountOptions = {
 export async function mountPdfReader(
   options: PdfMountOptions,
 ): Promise<ReaderRendition> {
-  const { data, contentEl, signal, onNavChange } = options;
+  const { data, contentEl, signal, onNavChange, onToc, onTocActive } = options;
 
   const pdfjs = await import("pdfjs-dist");
   // Served from public/ (same pdfjs-dist build) so opening a book never
@@ -27,6 +37,18 @@ export async function mountPdfReader(
   // effect re-runs.
   const pdf = await pdfjs.getDocument({ data: data.slice(0) }).promise;
   const totalPages = pdf.numPages;
+  const startPage = Math.min(
+    totalPages,
+    Math.max(1, options.initialPage ?? 1),
+  );
+
+  // Sidebar entries: one per page.
+  onToc?.(
+    Array.from({ length: totalPages }, (_, i) => ({
+      id: `page-${i + 1}`,
+      label: `Page ${i + 1}`,
+    })),
+  );
 
   const wrapper = document.createElement("div");
   wrapper.className =
@@ -34,7 +56,7 @@ export async function mountPdfReader(
   contentEl.innerHTML = "";
   contentEl.appendChild(wrapper);
 
-  let current = 1;
+  let current = startPage;
   let showSeq = 0;
   let destroyed = false;
 
@@ -117,7 +139,11 @@ export async function mountPdfReader(
       canPrev: n > 1,
       canNext: n < totalPages,
       pageLabel: `Page ${n} of ${totalPages}`,
+      page: n,
+      totalPages,
+      progressPercent: computeProgressPercent(n, totalPages),
     });
+    onTocActive?.(`page-${n}`);
 
     // Warm the pages a turn away in either direction
     for (const m of [n + 1, n - 1]) {
@@ -166,6 +192,13 @@ export async function mountPdfReader(
     next: async () => {
       if (current < totalPages) {
         current++;
+        await show(current);
+      }
+    },
+    goToTocItem: async (id) => {
+      const n = Number(id.replace("page-", ""));
+      if (Number.isInteger(n) && n >= 1 && n <= totalPages) {
+        current = n;
         await show(current);
       }
     },

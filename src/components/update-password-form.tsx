@@ -53,7 +53,7 @@ export function UpdatePasswordForm({
         await establishSession();
       }
 
-      router.push("/dashboard");
+      router.push("/library");
       router.refresh();
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");

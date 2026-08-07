@@ -36,7 +36,7 @@ export function LoginForm({
     try {
       await signInWithEmailAndPassword(auth, email, password);
       await establishSession();
-      router.push("/dashboard");
+      router.push("/library");
       router.refresh();
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");
@@ -53,7 +53,7 @@ export function LoginForm({
     try {
       await signInWithPopup(auth, new GoogleAuthProvider());
       await establishSession();
-      router.push("/dashboard");
+      router.push("/library");
       router.refresh();
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");

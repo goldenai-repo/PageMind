@@ -1,3 +1,5 @@
+import type { ReaderMode } from "@/lib/readers/reader-mode";
+
 export const COVERS = [
   "linear-gradient(145deg, #1B365D 0%, #2a4f87 100%)",
   "linear-gradient(145deg, #2E86AB 0%, #1a6a8a 100%)",
@@ -21,25 +23,79 @@ export function isBookExt(value: string): value is BookExt {
   return value === "pdf" || value === "epub" || value === "txt";
 }
 
+/** Reading shelf inside My Library */
+export type BookStatus = "want" | "finished";
+
+/**
+ * Sidebar filters:
+ * - home: shared catalog feed (every uploaded book; later Firestore-shared)
+ * - mine / favorite / want / finished: My Library shelves (per-user)
+ */
+export type LibraryShelf = "home" | "mine" | "favorite" | BookStatus;
+
+export type BookRating = 0 | 1 | 2 | 3 | 4 | 5;
+
+export type ReadingLocator =
+  | { format: "pdf"; page: number }
+  | {
+      format: "txt";
+      sectionIdx: number;
+      page: number;
+      mode: ReaderMode;
+    }
+  | {
+      format: "epub";
+      sectionIdx: number;
+      page: number;
+      mode: ReaderMode;
+      href?: string;
+    };
+
 /** Book metadata from the shared library (no file data). */
 export type BookMeta = {
   id: string;
   title: string;
   ext: BookExt;
+  /** CSS gradient fallback when no cover image */
   cover: string;
+  /** Extracted cover thumbnail (EPUB/PDF/TXT); shown on shelf cards */
+  coverImage?: Blob | null;
   size: string;
   addedAt: Date;
 };
 
 /** Wire format for BookMeta over the API. */
-export type BookMetaJson = Omit<BookMeta, "addedAt"> & { addedAt: string };
+export type BookMetaJson = Omit<BookMeta, "addedAt" | "coverImage"> & {
+  addedAt: string;
+};
 
 export type LibraryBook = BookMeta & {
   /** File for EPUB; ArrayBuffer for PDF; string for TXT */
   data: File | ArrayBuffer | string;
+  /** In the user's personal library (My Books) */
+  inMyLibrary?: boolean;
+  /** Reading status within My Library */
+  status?: BookStatus;
+  favorite?: boolean;
+  /** Personal rating; 0 = unrated */
+  rating?: BookRating;
+  /** 1-based last page (PDF) or page-in-section (reflowable) */
+  lastReadPage?: number;
+  totalPages?: number | null;
+  /** 0–100; denormalized for the shelf grid */
+  progressPercent?: number;
+  locator?: ReadingLocator | null;
+  lastOpenedAt?: Date | null;
 };
 
-/** Per-user shelf state for one book. Dates are ISO 8601. */
+export type ReadingProgressUpdate = {
+  lastReadPage: number;
+  totalPages: number;
+  progressPercent: number;
+  locator: ReadingLocator;
+};
+
+/** Per-user shelf state for one book (shared-library API). Dates are ISO 8601. */
 export type ShelfEntry = {
   bookId: string;
   archived: boolean;
@@ -59,4 +115,64 @@ export function formatDate(d: Date) {
     day: "numeric",
     year: "numeric",
   });
+}
+
+/** Clamp progress to an integer 0–100. */
+export function computeProgressPercent(
+  lastReadPage: number,
+  totalPages: number,
+): number {
+  if (!Number.isFinite(lastReadPage) || !Number.isFinite(totalPages)) return 0;
+  if (totalPages <= 0) return 0;
+  const raw = (lastReadPage / totalPages) * 100;
+  return Math.min(100, Math.max(0, Math.round(raw)));
+}
+
+/**
+ * Section-weighted progress for reflowable books (TXT/EPUB), where global
+ * page count isn't known up front.
+ */
+export function computeSectionProgressPercent(
+  sectionIdx: number,
+  sectionCount: number,
+  page: number,
+  pageCount: number,
+): number {
+  if (sectionCount <= 0) return 0;
+  const pages = Math.max(1, pageCount);
+  const within = Math.min(1, Math.max(0, (page + 1) / pages));
+  const raw = ((sectionIdx + within) / sectionCount) * 100;
+  return Math.min(100, Math.max(0, Math.round(raw)));
+}
+
+export function isInMyLibrary(book: LibraryBook): boolean {
+  return Boolean(
+    book.inMyLibrary ||
+      book.favorite ||
+      book.status === "want" ||
+      book.status === "finished",
+  );
+}
+
+/** Defaults for older IndexedDB rows missing Phase 1 fields. */
+export function normalizeLibraryBook(book: LibraryBook): LibraryBook {
+  return {
+    ...book,
+    rating: (book.rating ?? 0) as BookRating,
+    lastReadPage: book.lastReadPage ?? 0,
+    totalPages: book.totalPages ?? null,
+    progressPercent: book.progressPercent ?? 0,
+    locator: book.locator ?? null,
+    lastOpenedAt: book.lastOpenedAt ?? null,
+  };
+}
+
+/** Remove from My Books only — catalog row stays on Home. */
+export function removeFromMyLibrary(book: LibraryBook): LibraryBook {
+  return {
+    ...book,
+    inMyLibrary: false,
+    favorite: false,
+    status: undefined,
+  };
 }

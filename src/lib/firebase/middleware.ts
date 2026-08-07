@@ -34,7 +34,7 @@ export async function updateSession(request: NextRequest) {
     path.startsWith("/auth") ||
     path.startsWith("/api/auth");
 
-  // Stale/invalid cookie: clear it so it can't bounce login ↔ dashboard
+  // Stale/invalid cookie: clear it so it can't bounce login ↔ library
   if (session && !valid) {
     const response = isPublic
       ? NextResponse.next({ request })
@@ -45,7 +45,7 @@ export async function updateSession(request: NextRequest) {
 
   if (valid && (path.startsWith("/auth/login") || path.startsWith("/auth/sign-up"))) {
     const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
+    url.pathname = "/library";
     return NextResponse.redirect(url);
   }
 
