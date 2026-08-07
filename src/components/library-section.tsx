@@ -41,7 +41,7 @@ async function backfillCovers(
 
 function matchesShelf(book: LibraryBook, shelf: LibraryShelf) {
   switch (shelf) {
-    case "store":
+    case "home":
       return true;
     case "mine":
       return isInMyLibrary(book);
@@ -56,7 +56,7 @@ function matchesShelf(book: LibraryBook, shelf: LibraryShelf) {
 
 export function LibrarySection({
   userId,
-  shelf = "store",
+  shelf = "home",
 }: {
   userId: string;
   shelf?: LibraryShelf;
@@ -140,11 +140,11 @@ export function LibrarySection({
     [currentBookId, userId],
   );
 
-  const isStore = shelf === "store";
+  const isHome = shelf === "home";
 
   if (visibleBooks.length === 0) {
     const emptyLabel =
-      shelf === "store" ? "No books yet" : "No books on this shelf";
+      shelf === "home" ? "No books yet" : "No books on this shelf";
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 py-20 text-center">
         <div className="flex size-16 items-center justify-center rounded-2xl bg-muted text-navy/40">
@@ -167,7 +167,7 @@ export function LibrarySection({
         {visibleBooks.map((book) => {
           const saved = isInMyLibrary(book);
 
-          const menuItems: BookCardMenuItem[] = isStore
+          const menuItems: BookCardMenuItem[] = isHome
             ? [
                 ...(!saved
                   ? [
@@ -229,11 +229,11 @@ export function LibrarySection({
               key={book.id}
               book={book}
               onOpen={() => openBook(book)}
-              showProgress
+              // Progress is per-user — hide on Home (shared catalog later).
+              showProgress={!isHome}
               showRating
-              // Same StarRating look on all shelves; only My Library shelves rate.
               onRate={
-                isStore
+                isHome
                   ? undefined
                   : (rating: BookRating) => updateBook(book, { rating })
               }

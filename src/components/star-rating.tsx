@@ -14,7 +14,7 @@ type StarRatingProps = {
 };
 
 /**
- * Single star-row used on All Books and My Books.
+ * Single star-row used on Home and My Library shelves.
  * Same look everywhere; interactivity is optional via onChange.
  */
 export function StarRating({

@@ -1,18 +1,21 @@
 # Design Doc - PageMind Bookshelf (收藏 · 进度 · 评分)
 
 **Author:** Coco  
-**Version:** 1.2  
+**Version:** 1.3  
 **Date:** 2026-08-07  
 **Branch:** `feat/user-library`  
-**Change in 1.2:** Rename Phase 1 storage APIs for clarity (pending code rename after approval).
+
+**Changelog**
+- **1.3:** Rename **All Books → Home**; shelf id `store` → `home`; hide personal progress on Home; API `listAllBooks` → `listHomeBooks`.
+- **1.2:** Rename Phase 1 storage APIs for clarity (pending code rename after approval).
 
 ---
 
 ## Objective
 
-Let users browse uploaded books, open them into My Books, track reading progress, favorite books, and rate them with stars — Apple Books–style shelf UI.
+Let users browse the shared catalog on **Home**, open books into **My Books**, track personal reading progress, favorite books, and rate them with stars — Apple Books–style shelf UI.
 
-**Out of scope:** comments, highlights, deleting uploads from All Books.
+**Out of scope:** comments, highlights, deleting uploads from Home.
 
 ---
 
@@ -21,19 +24,18 @@ Let users browse uploaded books, open them into My Books, track reading progress
 PageMind already has:
 
 - Firebase Auth
-- Library shelves (All Books / My Books / Favorite / Want / Finished)
+- Library shelves (Home / My Books / Favorite / Want / Finished)
 - Upload + reader (PDF / EPUB / TXT)
 - Books stored per user in **IndexedDB** (no Firestore for books yet)
 
-Missing today: progress bar, star rating, delete-from-My-Books, open-from-All-Books → add to My Books.
-
 **Product rules (locked):**
 
-1. Upload → appears in **All Books**
+1. Upload → appears on **Home**
 2. Click/open a book → opens reader **and** adds to **My Books**
-3. `⋯` on My Books → **Favorite** or **Delete** (Delete = remove from My Books only; book stays in All Books)
-4. `⋯` on All Books → **Favorite** (no delete)
-5. Under each cover: **progress % + bar**, then **5-star rating**
+3. `⋯` on My Books → **Favorite**, **Want to Read**, or **Delete** (Delete = remove from My Books only; book stays on Home)
+4. `⋯` on Home → **Add to My Books**, **Favorite**, **Want to Read** (no delete, no personal progress)
+5. Under each cover: title; on **My Library** shelves also **progress % + bar**; **5-star rating** (read-only avg on Home; interactive on My Library)
+6. Progress is **per-user** — never shown on Home (Home becomes a shared catalog in Phase 2)
 
 ---
 
@@ -42,28 +44,29 @@ Missing today: progress bar, star rating, delete-from-My-Books, open-from-All-Bo
 ```
 Upload book
     → save to IndexedDB
-    → show in Book Store → All Books
+    → show on Browse → Home
 
-User clicks book (All Books)
+User clicks book (Home)
     → set inMyLibrary = true
     → open reader
     → book appears under My Library → My Books
 
 While reading
     → update lastReadPage / totalPages / progressPercent
-    → show % + progress bar under cover
+    → show % + progress bar under cover on My Library shelves only
 
-User rates book
+User rates book (My Library)
     → click 1–5 stars under cover (click same star again → clear)
+    → Home shows read-only aggregate (Phase 1: same personal value)
 
 User favorites
-    → from All Books or My Books ⋯
+    → from Home or My Books ⋯
     → show under Favorite
 
 User deletes (My Books only)
     → inMyLibrary = false
     → remove from My Books / Favorite
-    → still visible in All Books
+    → still visible on Home
 ```
 
 ---
@@ -95,34 +98,49 @@ User deletes (My Books only)
 
 Two logical parts (Phase 1: one IndexedDB record with both; Phase 2: split collections).
 
-### A. Catalog book (All Books / upload)
+### A. Catalog book (Home / upload)
+
+Shared catalog fields — what every reader can see on Home later.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | string | PK |
 | `title` | string | From filename |
 | `ext` | `pdf \| epub \| txt` | |
-| `cover` | string | Gradient / cover token |
+| `cover` | string | Gradient fallback |
+| `coverImage` | Blob \| null | Extracted/generated thumbnail |
 | `size` | string | Display size |
 | `sizeBytes` | number | Optional |
 | `data` | File / ArrayBuffer / string | Phase 1 file bytes in IDB |
 | `storagePath` | string | Phase 2 only |
-| `totalPages` | number \| null | Set on first open |
+| `totalPages` | number \| null | Set on first open (may stay catalog-level for PDF) |
 | `addedAt` | Date | |
 
-### B. User book state (My Library)
+### B. User book state (My Library — personal)
 
 | Column | Type | Notes |
 |---|---|---|
 | `inMyLibrary` | boolean | My Books membership |
 | `favorite` | boolean | Favorite shelf |
 | `status` | `want \| finished` \| unset | Existing shelves |
-| `rating` | `0–5` | 0 = unrated |
-| `lastReadPage` | number | Last page read |
+| `rating` | `0–5` | 0 = unrated (personal; Home may show avg later) |
+| `lastReadPage` | number | Last page read (**personal — not on Home UI**) |
 | `totalPages` | number \| null | For percent |
-| `progressPercent` | number | `round(lastReadPage / totalPages * 100)` |
-| `locator` | object \| null | Resume (section/page/mode for EPUB/TXT) |
+| `progressPercent` | number | `round(lastReadPage / totalPages * 100)` (**personal**) |
+| `locator` | object \| null | Resume payload |
 | `lastOpenedAt` | Date \| null | |
+
+### Shelf ids (UI)
+
+| Shelf id | Label | Shows progress? |
+|---|---|---|
+| `home` | Home | **No** |
+| `mine` | My Books | Yes |
+| `favorite` | Favorite | Yes |
+| `want` | Want to Read | Yes |
+| `finished` | Finished | Yes |
+
+Legacy `?shelf=store` redirects to Home.
 
 ### Phase 1 IndexedDB
 
@@ -133,15 +151,15 @@ Two logical parts (Phase 1: one IndexedDB record with both; Phase 2: split colle
 ### Phase 2 Firestore (future)
 
 ```
-books/{bookId}                 ← catalog
-users/{userId}/books/{bookId}  ← user state
+books/{bookId}                 ← catalog (Home)
+users/{userId}/books/{bookId}  ← user state (progress / favorite / rating)
 ```
 
 Files → Firebase Storage path `books/{userId}/{bookId}/...`
 
 ---
 
-## Data Selection: 流量 / 储存预估
+## Data Selection: traffic / storage estimates
 
 **Assumptions:** ~1,000 users, ~1,000 books, ~20 My Books per user, progress saved ~30× per reading session (debounced).
 
@@ -149,8 +167,8 @@ Files → Firebase Storage path `books/{userId}/{bookId}/...`
 
 | Action | Approx volume | Notes |
 |---|---|---|
-| List All Books / My Books | Low | Dozens of rows per page view |
-| Progress writes | Medium | Debounced; still small for Firestore later |
+| List Home / My Books | Low | Dozens of rows per page view |
+| Progress writes | Medium | Debounced; per-user docs only |
 | Rating / favorite | Low | Rare clicks |
 
 Phase 1: all local → **no server traffic** for books.
@@ -171,8 +189,8 @@ Phase 2: ~5 GB on Firebase Storage for the 1k-book target.
 
 ## API
 
-> **Status:** naming proposal — **do not rename code until approved**.
-> Design doc language: English only. Bilingual explanations happen in chat when needed.
+> **Status:** naming proposal — storage helpers in code may still use old names until rename is approved/applied.  
+> Design doc language: English only.
 
 ### Why Phase 1 functions take `userId`
 
@@ -184,9 +202,9 @@ Phase 2 HTTP APIs take identity from the auth session instead (no `userId` in th
 
 ### Rename map (old → proposed)
 
-| Old name (current code) | New name (proposed) |
+| Old name (current / prior) | New name (proposed) |
 |---|---|
-| `loadBooks` | `listAllBooks` |
+| `loadBooks` | `listHomeBooks` |
 | `saveBook` | `putBook` |
 | `deleteBook` | `deleteUploadedBook` *(internal only; not exposed in UI)* |
 | `setLibraryMembership` | split → `addToMyBooks` / `removeFromMyBooks` |
@@ -195,77 +213,73 @@ Phase 2 HTTP APIs take identity from the auth session instead (no `userId` in th
 | `updateProgress` | `updateReadingProgress` |
 | *(new)* | `setBookStatus` — Want to Read / Finished |
 | private `getBook` | `getBookById` (optional export) |
+| UI “All Books” / shelf `store` | **Home** / shelf `home` |
+| Prior proposal `listAllBooks` | **`listHomeBooks`** |
 
-**Note on two confusing names (revised):**
-- Avoided `listUploadedBooks` → use **`listAllBooks`** (matches the UI label “All Books”).
-- Avoided `upsertBook` (“upsert” is DB jargon) → use **`putBook`** (write/replace one full book record).
+**Notes:**
+- `listHomeBooks` = catalog list for the **Home** page (not “my reading list”).
+- `putBook` = write/replace one full book record (storage primitive, not “Want to Read”).
 
 ---
 
 ### Phase 1 — local module API (`src/lib/storage.ts`)
 
-#### 1. `listAllBooks(userId): Promise<LibraryBook[]>`
+#### 1. `listHomeBooks(userId): Promise<LibraryBook[]>`
 
-Returns every book in this user’s local catalog — what the **All Books** page shows.
+Returns every book in this user’s local catalog — what the **Home** page shows.
 
 - Includes books that are only uploaded and not yet in My Books.
-- Does **not** filter by favorite / want / finished (the UI filters after loading, or a later helper can).
-- Phase 1 each item still includes file bytes + user-state fields on the same record.
+- Does **not** filter by favorite / want / finished.
+- UI must **not** render personal progress on this list (even if fields exist on the record in Phase 1).
 
 #### 2. `putBook(userId, book): Promise<void>`
 
 Writes **one full book record** into IndexedDB.
 
-- If `book.id` is new → creates the record (this is what **Upload** does).
-- If `book.id` already exists → replaces the whole record with the new object.
-- This is a **storage write primitive**, not a product action like “Want to Read” or “Favorite.”
-- Higher-level helpers (`addToMyBooks`, `setBookFavorite`, …) load a book, change fields, then call `putBook`.
+- If `book.id` is new → creates the record (Upload).
+- If `book.id` already exists → replaces the whole record.
+- Storage write primitive — not a product shelf action.
 
 #### 3. `getBookById(userId, bookId): Promise<LibraryBook | null>`
 
-Fetch a single book by id. Returns `null` if it does not exist.
+Fetch a single book by id. Returns `null` if missing.
 
 #### 4. `addToMyBooks(userId, bookId): Promise<LibraryBook | null>`
 
-Sets `inMyLibrary = true` so the book appears under **My Books**.  
-Also used when the user opens a book from All Books.
+Sets `inMyLibrary = true`. Also used when opening a book from Home.
 
 #### 5. `removeFromMyBooks(userId, bookId): Promise<LibraryBook | null>`
 
-User-facing **Delete** on My Books: clears `inMyLibrary` / favorite / status.  
-**Keeps** the file in the catalog → book still appears in **All Books**.  
-Not a permanent file delete.
+My Books **Delete**: clears library flags; book remains on **Home**.
 
 #### 6. `setBookFavorite(userId, bookId, favorite: boolean): Promise<LibraryBook | null>`
 
-Turns favorite on or off. When favoring, also sets `inMyLibrary = true`.
+Favorite on/off; favoring also sets `inMyLibrary = true`.
 
 #### 7. `setBookRating(userId, bookId, rating: 0|1|2|3|4|5): Promise<LibraryBook | null>`
 
-Sets the user’s personal star rating (`0` = unrated / cleared).
+Personal star rating (`0` = cleared). Interactive on My Library; Home shows read-only avg.
 
 #### 8. `setBookStatus(userId, bookId, status: "want" | "finished" | null): Promise<LibraryBook | null>`
 
-Sets Want to Read / Finished / clear. Also ensures `inMyLibrary = true` when status is set.
+Want to Read / Finished / clear; ensures My Books when set.
 
 #### 9. `updateReadingProgress(userId, bookId, progress): Promise<LibraryBook | null>`
 
-Persists reading progress: `lastReadPage`, `totalPages`, `progressPercent`, `locator`, `lastOpenedAt`.  
-Also sets `inMyLibrary = true`; at 100% may set `status = "finished"`.
+Persists personal progress + locator. Used by reader; surfaces on My Library shelves only.
 
 #### 10. `deleteUploadedBook(userId, bookId): Promise<void>` *(internal only — no UI)*
 
-Permanently removes the catalog row and file bytes from IndexedDB.  
-Not offered in the bookshelf UI (users cannot delete from All Books).
+Permanently removes catalog row + file. Not offered on Home.
 
 ---
 
-### Phase 1 call cheat-sheet (product action → API)
+### Phase 1 call cheat-sheet
 
 | User action | API |
 |---|---|
 | Upload file | `putBook` (new record, `inMyLibrary: false`) |
-| Open All Books page | `listAllBooks` |
+| Open Home page | `listHomeBooks` |
 | Add to My Books | `addToMyBooks` |
 | Delete from My Books | `removeFromMyBooks` |
 | Favorite / unfavorite | `setBookFavorite` |
@@ -278,14 +292,14 @@ Not offered in the bookshelf UI (users cannot delete from All Books).
 
 ### Phase 2 — HTTP (future; aligned names)
 
-Auth user comes from session cookie — no `userId` in path.
+Auth from session cookie — no `userId` in path.
 
 | Method | Path | Maps to Phase 1 idea |
 |---|---|---|
-| `GET` | `/api/books` | `listAllBooks` |
-| `POST` | `/api/books` | create catalog after Storage upload (`putBook` create path) |
+| `GET` | `/api/books` | `listHomeBooks` (shared catalog) |
+| `POST` | `/api/books` | create catalog after Storage upload |
 | `GET` | `/api/books/:bookId` | `getBookById` |
-| `GET` | `/api/library?shelf=mine\|favorite\|want\|finished` | filtered My Library lists |
+| `GET` | `/api/library?shelf=mine\|favorite\|want\|finished` | My Library lists |
 | `POST` | `/api/library/:bookId` | `addToMyBooks` |
 | `DELETE` | `/api/library/:bookId` | `removeFromMyBooks` |
 | `PUT` | `/api/library/:bookId/favorite` | `setBookFavorite` |
@@ -295,7 +309,7 @@ Auth user comes from session cookie — no `userId` in path.
 
 No `DELETE /api/books/:id` in product scope.
 
-### Reader hook (unchanged conceptually)
+### Reader hook
 
 ```ts
 onProgress?: (p: {
@@ -306,57 +320,58 @@ onProgress?: (p: {
 }) => void;
 ```
 
-Reader calls parent → parent calls `updateReadingProgress`.
+Reader → parent → `updateReadingProgress` (personal; not shown on Home).
 
 ---
 
 ## Implementation
 
-### UI (card under cover)
+### UI (cards)
 
+**Home**
 ```
-[ COVER ]
+[ COVER — A4 ]
+Title
+★★★★☆          (read-only avg)
+⋯ menu
+```
+
+**My Library (My Books / Favorite / …)**
+```
+[ COVER — A4 ]
+Title
 92% ████░░  ⋯
-★★★★☆
+★★★★☆          (interactive)
 ```
 
 ### Phase 1 steps
 
-1. Extend `LibraryBook` + bump IndexedDB version (rating, progress, locator)
-2. Add `StarRating` + progress row on book cards
-3. Open from All Books → `inMyLibrary = true` → reader
-4. My Books `⋯`: Favorite, Delete (membership only)
-5. All Books `⋯`: Favorite only (no Delete)
+1. Extend `LibraryBook` + IndexedDB (rating, progress, locator, coverImage)
+2. Shared `BookCard` + `StarRating`
+3. Open from Home → `inMyLibrary = true` → reader
+4. My Books `⋯`: Favorite, Want to Read, Delete
+5. Home `⋯`: Add / Favorite / Want to Read; **no progress bar**
 6. Reader emits progress; debounce save; resume on reopen
-7. Upload stays All Books–only until opened
-8. Tests for percent helper + delete-from-My-Books behavior
+7. Upload lands on Home until opened
+8. Rename storage APIs to match this doc (when approved)
 
 ### Phase 2 steps (later)
 
 1. Provision Firestore + Storage
-2. Upload → Storage + `books` doc
+2. Upload → Storage + `books` doc (Home catalog)
 3. User state → `users/{uid}/books/{bookId}`
 4. Keep IndexedDB as cache
-5. Still no user-facing delete from All Books
-
-### Files to touch (Phase 1)
-
-- `src/lib/books.ts`
-- `src/lib/storage.ts`
-- `src/components/library-section.tsx`
-- `src/components/upload-section.tsx`
-- `src/components/book-reader.tsx`
-- `src/lib/readers/*`
-- New: `book-card.tsx`, `star-rating.tsx`
+5. Still no user-facing delete from Home
 
 ### Success
 
-- Upload → All Books  
-- Open → My Books + progress bar updates  
+- Upload → Home  
+- Open → My Books + progress updates **there**  
+- Home never shows personal progress  
 - Favorite works  
-- Delete removes from My Books, **not** All Books  
+- Delete removes from My Books, **not** Home  
 - Stars persist after refresh  
 
 ---
 
-*Next: implement Phase 1 (IndexedDB).*
+*Document version 1.3 — Home rename + no progress on Home.*

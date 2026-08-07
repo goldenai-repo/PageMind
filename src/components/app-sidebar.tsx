@@ -6,9 +6,9 @@ import {
   BookMarked,
   BookOpen,
   CheckCircle2,
+  Home,
   Library,
   Star,
-  Store,
   Upload,
 } from "lucide-react";
 
@@ -27,12 +27,12 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar";
 
-const bookStore = [
+const browseNav = [
   {
-    title: "All Books",
+    title: "Home",
     href: "/library",
-    shelf: "store",
-    icon: Store,
+    shelf: "home",
+    icon: Home,
   },
 ] as const;
 
@@ -71,7 +71,7 @@ export function AppSidebar({
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const activeShelf = searchParams.get("shelf") ?? "store";
+  const activeShelf = searchParams.get("shelf") ?? "home";
   const onLibrary = pathname.startsWith("/library");
   const onUpload = pathname.startsWith("/upload");
 
@@ -103,10 +103,10 @@ export function AppSidebar({
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Book Store</SidebarGroupLabel>
+          <SidebarGroupLabel>Browse</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {bookStore.map((item) => (
+              {browseNav.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     tooltip={item.title}

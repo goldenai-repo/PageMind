@@ -18,10 +18,10 @@ export type BookStatus = "want" | "finished";
 
 /**
  * Sidebar filters:
- * - store: Book Store → All Books (every uploaded book)
- * - mine / favorite / want / finished: My Library shelves
+ * - home: shared catalog feed (every uploaded book; later Firestore-shared)
+ * - mine / favorite / want / finished: My Library shelves (per-user)
  */
-export type LibraryShelf = "store" | "mine" | "favorite" | BookStatus;
+export type LibraryShelf = "home" | "mine" | "favorite" | BookStatus;
 
 export type BookRating = 0 | 1 | 2 | 3 | 4 | 5;
 
@@ -142,7 +142,7 @@ export function normalizeLibraryBook(
   };
 }
 
-/** Remove from My Books only — catalog row stays (All Books). */
+/** Remove from My Books only — catalog row stays on Home. */
 export function removeFromMyLibrary(book: LibraryBook): LibraryBook {
   return {
     ...book,

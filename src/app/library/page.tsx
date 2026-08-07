@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 
 const SHELF_META: Record<LibraryShelf, { title: string; description: string }> =
   {
-    store: { title: "All Books", description: "Book Store" },
+    home: { title: "Home", description: "Browse" },
     mine: { title: "My Books", description: "My Library" },
     favorite: { title: "Favorite", description: "My Library" },
     want: { title: "Want to Read", description: "My Library" },
@@ -22,7 +22,8 @@ function parseShelf(value: string | undefined): LibraryShelf {
   ) {
     return value;
   }
-  return "store";
+  // Accept legacy ?shelf=store links as Home.
+  return "home";
 }
 
 export default async function LibraryPage({

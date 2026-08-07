@@ -103,7 +103,7 @@ export async function saveBook(
 
 /**
  * Permanently removes the catalog row + file bytes.
- * Not used by bookshelf UI (users cannot delete from All Books).
+ * Not used by bookshelf UI (users cannot delete books from Home).
  */
 export async function deleteBook(userId: string, id: string): Promise<void> {
   const db = await openDB(userId);

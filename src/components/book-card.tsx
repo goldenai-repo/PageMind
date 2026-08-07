@@ -16,11 +16,11 @@ export type BookCardMenuItem = {
 type BookCardProps = {
   book: LibraryBook;
   onOpen: () => void;
-  /** Show progress row (All Books / My Books). Hidden on Upload. */
+  /** Show progress row (My Library shelves only — not Home). Hidden on Upload. */
   showProgress?: boolean;
   /** Show star row. */
   showRating?: boolean;
-  /** When set, stars are interactive (My Books). Omit for All Books look-alike read-only. */
+  /** When set, stars are interactive (My Books). Omit for Home avg display. */
   onRate?: (rating: BookRating) => void;
   menuOpen?: boolean;
   onMenuOpenChange?: (open: boolean) => void;
@@ -93,16 +93,54 @@ export function BookCard({
         </span>
       </button>
 
-      <p
-        className="mt-2 line-clamp-2 px-0.5 text-[0.875rem] leading-snug font-semibold text-foreground"
-        title={book.title}
-      >
-        {book.title}
-      </p>
+      <div className="mt-2 flex items-start gap-1 px-0.5">
+        <p
+          className="min-w-0 flex-1 line-clamp-2 text-[0.875rem] leading-snug font-semibold text-foreground"
+          title={book.title}
+        >
+          {book.title}
+        </p>
+        {hasMenu && !showProgress ? (
+          <div className="relative shrink-0 -mt-0.5">
+            <button
+              type="button"
+              aria-label={`Options for ${book.title}`}
+              aria-expanded={menuOpen}
+              onClick={(e) => {
+                e.stopPropagation();
+                onMenuOpenChange?.(!menuOpen);
+              }}
+              className="flex size-6 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-navy"
+            >
+              <MoreHorizontal className="size-4" />
+            </button>
+            {menuOpen ? (
+              <div
+                className="absolute top-full right-0 z-20 mt-1 min-w-48 overflow-hidden rounded-[6px] border border-border bg-white py-1 shadow-[0_8px_24px_rgba(27,54,93,0.12)]"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {menuItems!.map((item) => (
+                  <button
+                    key={item.label}
+                    type="button"
+                    className={cn(
+                      "block w-full px-3 py-1.5 text-left text-[0.82rem] font-medium hover:bg-muted",
+                      item.danger ? "text-red-600" : "text-foreground",
+                    )}
+                    onClick={() => item.onSelect()}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
 
-      {(showProgress || hasMenu) && (
-        <div className="mt-2 flex items-center gap-2 px-0.5">
-          {showProgress && hasProgress ? (
+      {showProgress ? (
+        <div className="mt-1.5 flex items-center gap-2 px-0.5">
+          {hasProgress ? (
             <>
               <span className="w-8 shrink-0 text-[0.7rem] tabular-nums text-muted-foreground">
                 {percent}%
@@ -164,10 +202,10 @@ export function BookCard({
             </div>
           ) : null}
         </div>
-      )}
+      ) : null}
 
       {showRating ? (
-        <div className="mt-1.5 px-0.5">
+        <div className="mt-1 px-0.5">
           <StarRating
             value={rating}
             onChange={onRate}
