@@ -13,6 +13,16 @@ export const COVERS = [
 
 export type BookExt = "pdf" | "epub" | "txt";
 
+export const BOOK_MIME: Record<BookExt, string> = {
+  pdf: "application/pdf",
+  epub: "application/epub+zip",
+  txt: "text/plain",
+};
+
+export function isBookExt(value: string): value is BookExt {
+  return value === "pdf" || value === "epub" || value === "txt";
+}
+
 /** Reading shelf inside My Library */
 export type BookStatus = "want" | "finished";
 
@@ -41,16 +51,25 @@ export type ReadingLocator =
       href?: string;
     };
 
-export type LibraryBook = {
+/** Book metadata from the shared library (no file data). */
+export type BookMeta = {
   id: string;
   title: string;
   ext: BookExt;
   /** CSS gradient fallback when no cover image */
   cover: string;
-  /** Extracted cover thumbnail (EPUB/PDF); shown on shelf cards */
+  /** Extracted cover thumbnail (EPUB/PDF/TXT); shown on shelf cards */
   coverImage?: Blob | null;
   size: string;
   addedAt: Date;
+};
+
+/** Wire format for BookMeta over the API. */
+export type BookMetaJson = Omit<BookMeta, "addedAt" | "coverImage"> & {
+  addedAt: string;
+};
+
+export type LibraryBook = BookMeta & {
   /** File for EPUB; ArrayBuffer for PDF; string for TXT */
   data: File | ArrayBuffer | string;
   /** In the user's personal library (My Books) */
@@ -74,6 +93,14 @@ export type ReadingProgressUpdate = {
   totalPages: number;
   progressPercent: number;
   locator: ReadingLocator;
+};
+
+/** Per-user shelf state for one book (shared-library API). Dates are ISO 8601. */
+export type ShelfEntry = {
+  bookId: string;
+  archived: boolean;
+  lastReadAt: string | null;
+  updatedAt: string;
 };
 
 export function formatSize(bytes: number) {
@@ -128,9 +155,7 @@ export function isInMyLibrary(book: LibraryBook): boolean {
 }
 
 /** Defaults for older IndexedDB rows missing Phase 1 fields. */
-export function normalizeLibraryBook(
-  book: LibraryBook,
-): LibraryBook {
+export function normalizeLibraryBook(book: LibraryBook): LibraryBook {
   return {
     ...book,
     rating: (book.rating ?? 0) as BookRating,

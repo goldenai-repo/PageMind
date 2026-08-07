@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tip Cards — Design · PageMind</title>
+    <style>
+      :root {
+        --navy: #1b365d;
+        --navy-light: #2a4f87;
+        --bg: #f5f7fb;
+        --ink: #2a3140;
+        --muted: #8a93a2;
+        --border: #e2e8f0;
+        --bg-background: #2e86ab;
+        --bg-controversy: #e68a2e;
+        --bg-deepdive: #7c3aed;
+        --bg-connection: #27a96c;
+        --bg-factcheck: #dc2626;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+          Arial, sans-serif;
+        line-height: 1.65;
+      }
+      .wrap {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 3rem 1.5rem 5rem;
+      }
+      header.doc {
+        border-bottom: 3px solid var(--navy);
+        padding-bottom: 1.25rem;
+        margin-bottom: 2.5rem;
+      }
+      h1 {
+        color: var(--navy);
+        font-size: 2.1rem;
+        margin: 0 0 0.4rem;
+        letter-spacing: -0.02em;
+      }
+      header.doc p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 1.02rem;
+      }
+      h2 {
+        color: var(--navy);
+        font-size: 1.4rem;
+        margin: 2.75rem 0 1rem;
+        letter-spacing: -0.01em;
+      }
+      h3 {
+        color: var(--navy-light);
+        font-size: 1.08rem;
+        margin: 1.75rem 0 0.75rem;
+      }
+      p {
+        margin: 0 0 1rem;
+      }
+      code {
+        background: #eef2f7;
+        padding: 0.12em 0.4em;
+        border-radius: 4px;
+        font-family: "SF Mono", Menlo, Consolas, monospace;
+        font-size: 0.88em;
+      }
+      pre {
+        background: #0f1724;
+        color: #e6edf6;
+        padding: 1.1rem 1.25rem;
+        border-radius: 10px;
+        overflow-x: auto;
+        font-size: 0.82rem;
+        line-height: 1.55;
+        font-family: "SF Mono", Menlo, Consolas, monospace;
+      }
+      pre.ascii {
+        background: #fff;
+        color: #55617a;
+        border: 1px solid var(--border);
+        font-size: 0.72rem;
+        line-height: 1.35;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: 1rem 0 1.5rem;
+        font-size: 0.92rem;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 0.6rem 0.85rem;
+        border-bottom: 1px solid var(--border);
+      }
+      th {
+        color: var(--navy);
+        font-weight: 600;
+        border-bottom: 2px solid var(--border);
+      }
+
+      /* Live tip-card previews */
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+        gap: 1rem;
+        margin: 1.25rem 0 1.75rem;
+      }
+      .tip {
+        background: #fff;
+        border: 1px solid var(--border);
+        border-left: 4px solid var(--accent);
+        border-radius: 10px;
+        padding: 0.9rem 1rem 1rem;
+        box-shadow: 0 2px 12px rgba(27, 54, 93, 0.07);
+      }
+      .tip .badge {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 0.66rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--accent);
+      }
+      .tip .badge .src {
+        color: var(--muted);
+        font-weight: 600;
+      }
+      .tip h4 {
+        margin: 0.55rem 0 0.4rem;
+        font-size: 0.98rem;
+        color: var(--ink);
+      }
+      .tip p {
+        margin: 0;
+        font-size: 0.85rem;
+        color: #55617a;
+      }
+      .tip .ref {
+        margin-top: 0.7rem;
+        font-size: 0.78rem;
+        color: var(--accent);
+        font-weight: 600;
+      }
+      .swatch {
+        display: inline-block;
+        width: 0.85rem;
+        height: 0.85rem;
+        border-radius: 3px;
+        vertical-align: middle;
+        margin-right: 0.4rem;
+      }
+      .note {
+        background: #fff;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 1rem 1.25rem;
+      }
+      .note ul {
+        margin: 0.35rem 0 0;
+        padding-left: 1.2rem;
+      }
+      .note li {
+        margin-bottom: 0.4rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="doc">
+        <h1>Tip Cards</h1>
+        <p>
+          Reader-anchored annotations that surface supplemental context for
+          specific passages in a book.
+        </p>
+      </header>
+
+      <p>
+        A <strong>tip card</strong> is attached to a verbatim passage
+        ("anchor") in a book: background knowledge, controversies, deeper
+        explanations, cross-connections, and fact-checks. Tips sit alongside
+        the reading experience in a right-hand panel and never interrupt the
+        flow of the text. They can be authored by the reader manually, or
+        generated by Claude from the text on the current page.
+      </p>
+
+      <h2>Live preview</h2>
+      <p>The five tip types and their visual language:</p>
+      <div class="cards">
+        <div class="tip" style="--accent: var(--bg-background)">
+          <div class="badge"><span>● Background</span><span class="src">AI · Ch2</span></div>
+          <h4>Neo-Darwinian Synthesis</h4>
+          <p>
+            The "Modern Synthesis" of the 1930s–40s united Mendelian genetics
+            with Darwinian natural selection.
+          </p>
+          <div class="ref">📎 Stanford Encyclopedia</div>
+        </div>
+        <div class="tip" style="--accent: var(--bg-controversy)">
+          <div class="badge"><span>⚡ Controversy</span><span class="src">AI · Ch2</span></div>
+          <h4>Group Selection Debate</h4>
+          <p>
+            E.O. Wilson later argued for multilevel selection, reopening a
+            dispute Dawkins considered settled.
+          </p>
+        </div>
+        <div class="tip" style="--accent: var(--bg-deepdive)">
+          <div class="badge"><span>◈ Deep dive</span><span class="src">User · Ch3</span></div>
+          <h4>Hamilton's Rule</h4>
+          <p>
+            <code>rb &gt; c</code> — altruism spreads when relatedness times
+            benefit exceeds the cost to the actor.
+          </p>
+        </div>
+        <div class="tip" style="--accent: var(--bg-connection)">
+          <div class="badge"><span>⟷ Connection</span><span class="src">AI · Ch1</span></div>
+          <h4>See also: Gödel, Escher, Bach</h4>
+          <p>
+            Hofstadter's treatment of self-reference echoes the replicator's
+            self-copying logic.
+          </p>
+        </div>
+        <div class="tip" style="--accent: var(--bg-factcheck)">
+          <div class="badge"><span>✓ Fact-check</span><span class="src">AI · Ch4</span></div>
+          <h4>Meme coinage</h4>
+          <p>
+            The term "meme" was indeed coined here (1976), predating its
+            internet usage by decades.
+          </p>
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr><th>Type</th><th>Color</th><th>Use when</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>● background</td><td><span class="swatch" style="background: #2e86ab"></span>#2E86AB</td><td>Historical context, who/what something is</td></tr>
+          <tr><td>⚡ controversy</td><td><span class="swatch" style="background: #e68a2e"></span>#e68a2e</td><td>Competing theories, academic disputes</td></tr>
+          <tr><td>◈ deep-dive</td><td><span class="swatch" style="background: #7c3aed"></span>#7c3aed</td><td>Richer explanation of a concept</td></tr>
+          <tr><td>⟷ connection</td><td><span class="swatch" style="background: #27a96c"></span>#27a96c</td><td>Links to other books, fields, or ideas</td></tr>
+          <tr><td>✓ fact-check</td><td><span class="swatch" style="background: #dc2626"></span>#dc2626</td><td>Verifying or qualifying a claim</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Reader layout</h2>
+      <p>
+        A 💡 lightbulb button in the header toggles the tips panel, mirroring
+        the existing 📑 TOC button. On narrow viewports the panel overlays the
+        reading area instead of splitting it. Clicking a card scrolls the
+        reader to its anchored passage and briefly highlights it.
+      </p>
+      <pre class="ascii">
+┌─────────────────────────────────────────────────────────────────┐
+│  ← My Library      The Selfish Gene        [≡] [💡] [A-][A+] │
+├──────────────────┬──────────────────────┬───────────────────┤
+│  TOC             │  ...the gene is the  │  Tips  (3)   [×]  │
+│  Ch 1            │  basic unit of       ├───────────────────┤
+│  Ch 2  ●         │  selection...        │ ┌───────────────┐ │
+│  Ch 3            │                      │ │● BACKGROUND   │ │
+│                  │  ...Hamilton's rule  │ │ Neo-Darwinian │ │
+│                  │  (rb > c)...         │ │ Synthesis...  │ │
+│                  │                      │ └───────────────┘ │
+│                  │                      │ ┌───────────────┐ │
+│                  │                      │ │⚡ CONTROVERSY │ │
+│                  │                      │ │ Group Sel...  │ │
+│                  │                      │ └───────────────┘ │
+├──────────────────┴──────────────────────┴───────────────────┤
+│  ← Previous            Page 2 of 8              Next → │
+└─────────────────────────────────────────────────────────────────┘</pre>
+
+      <h2>Data schema</h2>
+      <pre>// src/lib/tips.ts
+
+export type TipType =
+  | "background"
+  | "controversy"
+  | "deep-dive"
+  | "connection"
+  | "fact-check";
+
+export type TipSource = "ai" | "user";
+
+export type TipReference = {
+  label: string;
+  url: string;
+};
+
+export type TipAnchor = {
+  // Verbatim passage the tip refers to; used to re-locate + highlight it.
+  text: string;
+  chapterHref?: string; // EPUB: spine item href
+  pageNumber?: number;  // PDF: 1-indexed
+};
+
+export type TipCard = {
+  id: string;
+  bookId: string;
+  anchor: TipAnchor;
+  type: TipType;
+  title: string;
+  body: string;
+  references?: TipReference[];
+  source: TipSource;
+  createdAt: string; // ISO 8601
+};</pre>
+
+      <h2>Storage</h2>
+      <p>
+        Tips live in a new <code>tips</code> object store in the existing
+        <code>pagemind</code> IndexedDB database, alongside the current
+        <code>books</code> store. A <code>bookId</code> index gives fast
+        per-book lookup.
+      </p>
+      <pre class="ascii">
+pagemind DB
+├── books   (existing)
+└── tips    (new)  — keyPath: "id", index: "bookId"</pre>
+      <p>Helper API in <code>src/lib/tips.ts</code>:</p>
+      <ul>
+        <li><code>saveTip(tip: TipCard): Promise&lt;void&gt;</code></li>
+        <li><code>loadTipsForBook(bookId: string): Promise&lt;TipCard[]&gt;</code></li>
+        <li><code>deleteTip(id: string): Promise&lt;void&gt;</code></li>
+      </ul>
+
+      <h2>Architecture</h2>
+      <pre class="ascii">
+User selects text
+      │
+      ▼
+"Add tip" popover
+      │
+      ├─ type, title, body form ──────────► saveTip → IndexedDB
+      │
+      └─ [AI mode] ──► POST /api/tips/generate
+                             │
+                             ▼
+                       Claude API (claude-sonnet-4-6)
+                       given anchor text + book title
+                       → { type, title, body, references }
+                             │
+                             ▼
+                       saveTip → IndexedDB → render in panel</pre>
+
+      <h2>MVP build order</h2>
+      <ol>
+        <li>
+          <strong>Schema + IndexedDB</strong> — <code>src/lib/tips.ts</code>
+          with <code>saveTip</code>, <code>loadTipsForBook</code>,
+          <code>deleteTip</code>.
+        </li>
+        <li>
+          <strong>Tips panel</strong> — right sidebar in
+          <code>BookReader</code>, toggled by a lightbulb button in the header.
+        </li>
+        <li>
+          <strong>Manual creation</strong> — text selection triggers an "Add
+          tip" popover with a type picker and title/body fields.
+        </li>
+        <li>
+          <strong>AI generation</strong> — a "Generate tips for this page"
+          button that sends the current page text to Claude via
+          <code>/api/tips/generate</code>.
+        </li>
+      </ol>
+
+      <h2>Open questions</h2>
+      <div class="note">
+        <ul>
+          <li>
+            Should AI generation run per-page on demand, or pre-generate for
+            the whole book on first open?
+          </li>
+          <li>
+            Do tips sync per-user (server-side) or stay device-local in
+            IndexedDB like books currently do?
+          </li>
+          <li>
+            Should readers be able to edit AI-generated tips, or only
+            accept/dismiss them?
+          </li>
+        </ul>
+      </div>
+    </div>
+  </body>
+</html>

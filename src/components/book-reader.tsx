@@ -5,12 +5,15 @@ import {
   BookOpen,
   ChevronLeft,
   Columns2,
+  Lightbulb,
   PanelLeft,
   ScrollText,
+  X,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import type { LibraryBook, ReadingProgressUpdate } from "@/lib/books";
+import { fetchTipsForBook } from "@/lib/library-api";
 import { mountEpubReader } from "@/lib/readers/epub-engine";
 import { mountPdfReader } from "@/lib/readers/pdf";
 import {
@@ -26,6 +29,7 @@ import type {
   ReaderRendition,
   ReaderTocItem,
 } from "@/lib/readers/types";
+import { TIP_TYPES, type TipCard } from "@/lib/tips";
 import { cn } from "@/lib/utils";
 
 const READER_MODE_OPTIONS: {
@@ -75,11 +79,55 @@ export function BookReader({ book, onClose, onProgress }: BookReaderProps) {
     pageLabel: "",
   });
 
+  const [tips, setTips] = useState<TipCard[]>([]);
+  const [visibleTips, setVisibleTips] = useState<TipCard[]>([]);
+  const [notesOpen, setNotesOpen] = useState(true);
+  const [tipsLoading, setTipsLoading] = useState(true);
+  // Bumped when a rendition finishes mounting, so notes recompute for page 1.
+  const [readerReady, setReaderReady] = useState(0);
+
   const reflowable = book.ext === "txt" || book.ext === "epub";
 
   useEffect(() => {
     onProgressRef.current = onProgress;
   }, [onProgress]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setTipsLoading(true);
+    fetchTipsForBook(book.id)
+      .then((loaded) => {
+        if (cancelled) return;
+        setTips(loaded);
+      })
+      .catch(console.error)
+      .finally(() => {
+        if (!cancelled) setTipsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [book.id]);
+
+  // Show only the notes whose anchor phrase is on the current page.
+  useEffect(() => {
+    const rendition = renditionRef.current;
+    if (!rendition) return;
+    let cancelled = false;
+    const strip = (s: string) => s.replace(/\s+/g, "");
+    Promise.resolve(rendition.getContext())
+      .then((ctx) => {
+        if (cancelled) return;
+        const haystack = strip(ctx.text);
+        setVisibleTips(
+          tips.filter((t) => haystack.includes(strip(t.anchor.text))),
+        );
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [tips, nav, readerReady]);
 
   // Keep the latest book payload for mount/resume without remounting when
   // progress fields update on the same id.
@@ -259,6 +307,9 @@ export function BookReader({ book, onClose, onProgress }: BookReaderProps) {
           }
           renditionRef.current = rendition;
         }
+        if (!abort.signal.aborted && renditionRef.current) {
+          setReaderReady((n) => n + 1);
+        }
       } catch (err) {
         if (abort.signal.aborted) return;
         setError(
@@ -335,6 +386,25 @@ export function BookReader({ book, onClose, onProgress }: BookReaderProps) {
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            title="Smart notes"
+            aria-pressed={notesOpen}
+            onClick={() => setNotesOpen((v) => !v)}
+            className={cn(
+              "relative rounded-md border-border bg-[#f0f2f5]",
+              notesOpen && "border-navy bg-navy/10 text-navy",
+            )}
+          >
+            <Lightbulb className="size-3.5" />
+            {tips.length > 0 ? (
+              <span className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-navy px-1 text-[0.6rem] font-bold text-white">
+                {tips.length}
+              </span>
+            ) : null}
+          </Button>
           {reflowable && (
             <div className="mr-1 flex items-center gap-0.5 rounded-md border border-border bg-[#f0f2f5] p-0.5">
               {READER_MODE_OPTIONS.map(({ value, label, icon: Icon }) => (
@@ -506,6 +576,88 @@ export function BookReader({ book, onClose, onProgress }: BookReaderProps) {
             </Button>
           </div>
         </div>
+
+        <aside
+          className={cn(
+            "flex shrink-0 flex-col overflow-hidden border-l border-border bg-[#f5f7fb] transition-[width] duration-200",
+            notesOpen ? "w-[320px]" : "w-0 border-l-0",
+          )}
+          aria-label="Smart notes"
+        >
+          <div className="flex shrink-0 items-center justify-between border-b border-border bg-white px-3 py-3 text-[0.72rem] font-bold tracking-wider text-navy uppercase">
+            <span className="px-1">Smart Notes</span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              aria-label="Close smart notes"
+              onClick={() => setNotesOpen(false)}
+              className="text-muted-foreground"
+            >
+              <X className="size-3.5" />
+            </Button>
+          </div>
+
+          <div className="flex-1 space-y-3 overflow-y-auto p-3">
+            {tipsLoading ? (
+              <p className="px-1 pt-6 text-center text-[0.8rem] text-muted-foreground">
+                Loading…
+              </p>
+            ) : tips.length === 0 ? (
+              <p className="px-1 pt-6 text-center text-[0.8rem] leading-relaxed text-muted-foreground">
+                No smart notes for this book yet.
+              </p>
+            ) : visibleTips.length === 0 ? (
+              <p className="px-1 pt-6 text-center text-[0.8rem] leading-relaxed text-muted-foreground">
+                No smart notes on this page. Keep reading — they appear beside
+                the passages they annotate.
+              </p>
+            ) : null}
+            {visibleTips.map((tip) => {
+              const meta = TIP_TYPES[tip.type];
+              return (
+                <div
+                  key={tip.id}
+                  className="rounded-lg border border-border bg-white p-3 shadow-[0_2px_10px_rgba(27,54,93,0.06)]"
+                  style={{ borderLeft: `4px solid ${meta.color}` }}
+                >
+                  <span
+                    className="text-[0.62rem] font-bold tracking-wider uppercase"
+                    style={{ color: meta.color }}
+                  >
+                    {meta.icon} {meta.label}
+                  </span>
+                  <p className="mt-1 text-[0.9rem] leading-snug font-semibold text-foreground">
+                    {tip.title}
+                  </p>
+                  <p className="mt-1 text-[0.82rem] leading-relaxed text-[#55617a]">
+                    {tip.body}
+                  </p>
+                  {tip.anchor.text ? (
+                    <p className="mt-2 border-l-2 border-border pl-2 text-[0.74rem] text-muted-foreground italic">
+                      “{tip.anchor.text}”
+                    </p>
+                  ) : null}
+                  {tip.references && tip.references.length > 0 ? (
+                    <div className="mt-2 flex flex-col gap-1">
+                      {tip.references.map((ref, i) => (
+                        <a
+                          key={i}
+                          href={ref.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="truncate text-[0.76rem] font-medium text-navy hover:underline"
+                        >
+                          📎 {ref.label}
+                        </a>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </aside>
       </div>
     </div>
   );

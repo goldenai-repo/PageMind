@@ -602,6 +602,18 @@ export function createFlowReader(options: FlowReaderOptions): FlowReader {
     themes: {
       fontSize: setFontSize,
     },
+    getContext() {
+      if (paginator) {
+        return {
+          text: paginator.getVisibleText(),
+          pageNumber: paginator.page + 1,
+        };
+      }
+      if (scrollerEl) {
+        return { text: scrollerEl.innerText || "" };
+      }
+      return { text: "" };
+    },
     destroy() {
       destroyed = true;
       seq++;

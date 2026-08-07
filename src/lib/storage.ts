@@ -6,30 +6,62 @@ import {
   type ReadingProgressUpdate,
 } from "./books";
 
+/**
+ * Shared IndexedDB (`pagemind`) caches downloaded shared-library bytes + tips.
+ * Per-user DBs (`pagemind_{userId}`) still hold the Phase-1 local bookshelf
+ * (full book records with progress / rating) used by /library UI.
+ */
+const SHARED_DB_NAME = "pagemind";
 const DB_PREFIX = "pagemind";
-/** v2: rating / progress / locator fields (embedded on the same store). */
 const DB_VERSION = 2;
 const STORE = "books";
+export const TIPS_STORE = "tips";
 
 type StoredBook = Omit<LibraryBook, "addedAt" | "lastOpenedAt"> & {
   addedAt: string;
   lastOpenedAt?: string | null;
 };
 
-function dbName(userId: string) {
+/**
+ * The shared `books` store caches downloaded file bytes for shared-library
+ * books. Records written before the shared library existed hold a full
+ * book (`data` field) — those are read via loadLegacyBooks() and uploaded
+ * to the shared library on first load, then deleted.
+ */
+type CachedBytes = { id: string; bytes: ArrayBuffer; cachedAt: string };
+
+type LegacyStoredBook = Omit<LibraryBook, "addedAt"> & { addedAt: string };
+
+function userDbName(userId: string) {
   return `${DB_PREFIX}_${userId}`;
 }
 
-function openDB(userId: string): Promise<IDBDatabase> {
+export function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(dbName(userId), DB_VERSION);
+    const req = indexedDB.open(SHARED_DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE)) {
         db.createObjectStore(STORE, { keyPath: "id" });
       }
-      // Field defaults are applied on read via normalizeLibraryBook — no
-      // per-row rewrite needed for v1 → v2.
+      if (!db.objectStoreNames.contains(TIPS_STORE)) {
+        const tips = db.createObjectStore(TIPS_STORE, { keyPath: "id" });
+        tips.createIndex("bookId", "bookId", { unique: false });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function openUserDB(userId: string): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(userDbName(userId), DB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(STORE)) {
+        db.createObjectStore(STORE, { keyPath: "id" });
+      }
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -59,7 +91,7 @@ async function getBook(
   userId: string,
   bookId: string,
 ): Promise<LibraryBook | null> {
-  const db = await openDB(userId);
+  const db = await openUserDB(userId);
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, "readonly");
     const req = tx.objectStore(STORE).get(bookId);
@@ -71,8 +103,71 @@ async function getBook(
   });
 }
 
+export async function loadCachedBookBytes(
+  id: string,
+): Promise<ArrayBuffer | null> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, "readonly");
+    const req = tx.objectStore(STORE).get(id);
+    req.onsuccess = () => {
+      const record = req.result as CachedBytes | undefined;
+      resolve(record?.bytes instanceof ArrayBuffer ? record.bytes : null);
+    };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export async function saveCachedBookBytes(
+  id: string,
+  bytes: ArrayBuffer,
+): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, "readwrite");
+    const record: CachedBytes = {
+      id,
+      bytes,
+      cachedAt: new Date().toISOString(),
+    };
+    const req = tx.objectStore(STORE).put(record);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
+}
+
+/** Books saved locally before the shared library existed. */
+export async function loadLegacyBooks(): Promise<LibraryBook[]> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, "readonly");
+    const req = tx.objectStore(STORE).getAll();
+    req.onsuccess = () => {
+      const records = req.result as (LegacyStoredBook | CachedBytes)[];
+      resolve(
+        records
+          .filter((r): r is LegacyStoredBook => "data" in r)
+          .map((r) => ({ ...r, addedAt: new Date(r.addedAt) }))
+          .sort((a, b) => a.addedAt.getTime() - b.addedAt.getTime()),
+      );
+    };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export async function deleteBookRecord(id: string): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, "readwrite");
+    const req = tx.objectStore(STORE).delete(id);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
+}
+
+/** Phase-1 /library UI: list full books from the per-user IndexedDB. */
 export async function loadBooks(userId: string): Promise<LibraryBook[]> {
-  const db = await openDB(userId);
+  const db = await openUserDB(userId);
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, "readonly");
     const req = tx.objectStore(STORE).getAll();
@@ -92,7 +187,7 @@ export async function saveBook(
   userId: string,
   book: LibraryBook,
 ): Promise<void> {
-  const db = await openDB(userId);
+  const db = await openUserDB(userId);
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, "readwrite");
     const req = tx.objectStore(STORE).put(toStored(book));
@@ -102,11 +197,11 @@ export async function saveBook(
 }
 
 /**
- * Permanently removes the catalog row + file bytes.
- * Not used by bookshelf UI (users cannot delete books from Home).
+ * Permanently removes a per-user catalog row + file bytes.
+ * Used by Upload page temporary delete (not Home soft-delete).
  */
 export async function deleteBook(userId: string, id: string): Promise<void> {
-  const db = await openDB(userId);
+  const db = await openUserDB(userId);
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, "readwrite");
     const req = tx.objectStore(STORE).delete(id);

@@ -1,5 +1,6 @@
 import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
 import { getAuth, type Auth } from "firebase-admin/auth";
+import { getFirestore, type Firestore } from "firebase-admin/firestore";
 
 /** Normalize PEM from .env / Doppler (quotes, escaped newlines, whitespace). */
 function normalizePrivateKey(raw: string): string {
@@ -40,4 +41,8 @@ function getAdminApp(): App {
 
 export function getAdminAuth(): Auth {
   return getAuth(getAdminApp());
+}
+
+export function getAdminFirestore(): Firestore {
+  return getFirestore(getAdminApp());
 }

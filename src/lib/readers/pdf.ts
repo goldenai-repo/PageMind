@@ -202,6 +202,16 @@ export async function mountPdfReader(
         await show(current);
       }
     },
+    getContext: async () => {
+      const page = await pdf.getPage(current);
+      const content = await page.getTextContent();
+      const text = content.items
+        .map((item) => ("str" in item ? item.str : ""))
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim();
+      return { text, pageNumber: current };
+    },
     themes: {
       fontSize() {
         // PDF pages are rasterized; font size does not apply.
