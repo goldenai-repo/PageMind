@@ -19,6 +19,7 @@ import {
   uploadBook,
 } from "@/lib/library-api";
 import { cn } from "@/lib/utils";
+import { saveCachedCover } from "@/lib/storage";
 
 function hasFiles(e: DragEvent | React.DragEvent) {
   return Array.from(e.dataTransfer?.types ?? []).includes("Files");
@@ -116,6 +117,9 @@ export function UploadSection({ userId }: { userId: string }) {
         ...mergeMetaWithShelf(meta),
         coverImage: coverImage ?? undefined,
       };
+      if (coverImage) {
+        void saveCachedCover(book.id, coverImage).catch(console.error);
+      }
       setBooks((prev) => {
         if (prev.some((b) => b.id === book.id)) return prev;
         return [...prev, book];

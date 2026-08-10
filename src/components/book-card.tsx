@@ -45,10 +45,11 @@ export function BookCard({
 }: BookCardProps) {
   const [titleCover, setTitleCover] = useState<Blob | null>(null);
 
-  // Fallback: gradient + title (no file needed). Parent can pass a real
-  // EPUB/PDF cover via book.coverImage, which takes priority below.
+  // TXT (and only TXT) can show title art immediately — no embedded cover to wait for.
+  // EPUB/PDF keep a plain placeholder until the real cover (or fallback) arrives
+  // from the parent, so we don't flash title-art → book cover on every refresh.
   useEffect(() => {
-    if (book.coverImage) return;
+    if (book.coverImage || book.ext !== "txt") return;
     let cancelled = false;
     void coverFromTitle(book.title, book.ext).then((blob) => {
       if (!cancelled) setTitleCover(blob);
@@ -77,6 +78,8 @@ export function BookCard({
   const averageRating = book.averageRating ?? 0;
   const ratingValue = onRate ? personalRating : averageRating;
   const hasMenu = Boolean(menuItems?.length);
+  const waitingForCover =
+    !coverUrl && (book.ext === "epub" || book.ext === "pdf");
 
   return (
     <div className={cn("relative flex flex-col", className)} role="listitem">
@@ -99,6 +102,9 @@ export function BookCard({
           <>
             <div className="absolute inset-y-0 left-0 w-[10px] border-r border-white/10 bg-black/20" />
             <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.14)_0%,transparent_55%)]" />
+            {waitingForCover ? (
+              <div className="absolute inset-0 animate-pulse bg-white/10" />
+            ) : null}
           </>
         )}
 

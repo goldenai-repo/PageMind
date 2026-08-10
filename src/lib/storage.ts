@@ -7,15 +7,17 @@ import {
 } from "./books";
 
 /**
- * Shared IndexedDB (`pagemind`) caches downloaded shared-library bytes + tips.
+ * Shared IndexedDB (`pagemind`) caches downloaded shared-library bytes, tips,
+ * and extracted shelf covers (so Home doesn't flash title-art → real cover).
  * Per-user DBs (`pagemind_{userId}`) still hold the Phase-1 local bookshelf
  * (full book records with progress / rating) used by /library UI.
  */
 const SHARED_DB_NAME = "pagemind";
 const DB_PREFIX = "pagemind";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const STORE = "books";
 export const TIPS_STORE = "tips";
+export const COVERS_STORE = "covers";
 
 type StoredBook = Omit<LibraryBook, "addedAt" | "lastOpenedAt"> & {
   addedAt: string;
@@ -29,6 +31,8 @@ type StoredBook = Omit<LibraryBook, "addedAt" | "lastOpenedAt"> & {
  * to the shared library on first load, then deleted.
  */
 type CachedBytes = { id: string; bytes: ArrayBuffer; cachedAt: string };
+
+type CachedCover = { id: string; blob: Blob; cachedAt: string };
 
 type LegacyStoredBook = Omit<LibraryBook, "addedAt"> & { addedAt: string };
 
@@ -47,6 +51,9 @@ export function openDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(TIPS_STORE)) {
         const tips = db.createObjectStore(TIPS_STORE, { keyPath: "id" });
         tips.createIndex("bookId", "bookId", { unique: false });
+      }
+      if (!db.objectStoreNames.contains(COVERS_STORE)) {
+        db.createObjectStore(COVERS_STORE, { keyPath: "id" });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -134,6 +141,50 @@ export async function saveCachedBookBytes(
     req.onsuccess = () => resolve();
     req.onerror = () => reject(req.error);
   });
+}
+
+export async function loadCachedCover(id: string): Promise<Blob | null> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(COVERS_STORE, "readonly");
+    const req = tx.objectStore(COVERS_STORE).get(id);
+    req.onsuccess = () => {
+      const record = req.result as CachedCover | undefined;
+      resolve(record?.blob instanceof Blob ? record.blob : null);
+    };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export async function saveCachedCover(id: string, blob: Blob): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(COVERS_STORE, "readwrite");
+    const record: CachedCover = {
+      id,
+      blob,
+      cachedAt: new Date().toISOString(),
+    };
+    const req = tx.objectStore(COVERS_STORE).put(record);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
+}
+
+/** Attach any locally cached covers onto catalog rows (fast path on refresh). */
+export async function attachCachedCovers(
+  books: LibraryBook[],
+): Promise<LibraryBook[]> {
+  const out: LibraryBook[] = [];
+  for (const book of books) {
+    if (book.coverImage) {
+      out.push(book);
+      continue;
+    }
+    const cached = await loadCachedCover(book.id).catch(() => null);
+    out.push(cached ? { ...book, coverImage: cached } : book);
+  }
+  return out;
 }
 
 /** Books saved locally before the shared library existed. */

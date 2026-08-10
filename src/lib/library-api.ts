@@ -10,13 +10,15 @@ import {
   type ReadingProgressUpdate,
   type ShelfEntry,
 } from "./books";
-import { extractCoverImage } from "./cover";
+import { extractCoverImage, coverFromTitle } from "./cover";
 import { decodeText } from "./readers/decode-text";
 import {
+  attachCachedCovers,
   deleteBookRecord,
   loadCachedBookBytes,
   loadLegacyBooks,
   saveCachedBookBytes,
+  saveCachedCover,
 } from "./storage";
 import type { TipCard } from "./tips";
 
@@ -131,13 +133,14 @@ export function mergeMetaWithShelf(
   });
 }
 
-/** Catalog + personal state for the library UI. */
+/** Catalog + personal state for the library UI (covers from local cache when present). */
 export async function fetchLibraryBooks(): Promise<LibraryBook[]> {
   const [metas, entries] = await Promise.all([fetchLibrary(), fetchShelf()]);
   const byId = new Map(entries.map((e) => [e.bookId, e]));
-  return metas
+  const merged = metas
     .map((meta) => mergeMetaWithShelf(meta, byId.get(meta.id)))
     .sort((a, b) => a.addedAt.getTime() - b.addedAt.getTime());
+  return attachCachedCovers(merged);
 }
 
 /** Fetch a book's file data (IndexedDB-cached) and hydrate it for the reader. */
@@ -173,8 +176,9 @@ export async function coverImageForBook(
 }
 
 /**
- * After the shelf lists, upgrade EPUB/PDF cards from title art to real covers.
- * Covers stay in React state only (no separate cover cache).
+ * Fill missing covers after the list paints.
+ * EPUB/PDF: real cover (or title fallback). TXT: title art.
+ * Results are cached so refresh shows the final cover immediately.
  */
 export async function enrichEpubPdfCovers(
   books: LibraryBook[],
@@ -184,14 +188,30 @@ export async function enrichEpubPdfCovers(
   for (const book of books) {
     if (signal?.cancelled) return;
     if (book.coverImage) continue;
-    if (book.ext !== "epub" && book.ext !== "pdf") continue;
+
     try {
-      const withData = await loadBookData(book);
-      if (signal?.cancelled) return;
-      const coverImage = await coverImageForBook(withData);
-      if (coverImage && !signal?.cancelled) onCover(book.id, coverImage);
+      let coverImage: Blob | null = null;
+      if (book.ext === "txt") {
+        coverImage = await coverFromTitle(book.title, book.ext);
+      } else if (book.ext === "epub" || book.ext === "pdf") {
+        const withData = await loadBookData(book);
+        if (signal?.cancelled) return;
+        coverImage = await coverImageForBook(withData);
+      }
+      if (!coverImage || signal?.cancelled) continue;
+      void saveCachedCover(book.id, coverImage).catch(console.error);
+      onCover(book.id, coverImage);
     } catch (err) {
       console.error(`Cover extract failed for ${book.title}:`, err);
+      if (book.ext === "epub" || book.ext === "pdf") {
+        const fallback = await coverFromTitle(book.title, book.ext).catch(
+          () => null,
+        );
+        if (fallback && !signal?.cancelled) {
+          void saveCachedCover(book.id, fallback).catch(console.error);
+          onCover(book.id, fallback);
+        }
+      }
     }
   }
 }
@@ -216,6 +236,9 @@ export async function openLibraryBook(book: LibraryBook): Promise<LibraryBook> {
     book.coverImage ??
     (await coverImageForBook(withData).catch(() => null)) ??
     null;
+  if (coverImage) {
+    void saveCachedCover(book.id, coverImage).catch(console.error);
+  }
 
   const merged = entry
     ? mergeMetaWithShelf(withData, entry)
