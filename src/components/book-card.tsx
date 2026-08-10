@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
-import { BookOpen, MoreHorizontal } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { MoreHorizontal } from "lucide-react";
 
 import { StarRating } from "@/components/star-rating";
 import type { BookRating, LibraryBook } from "@/lib/books";
+import { coverFromTitle } from "@/lib/cover";
 import { cn } from "@/lib/utils";
 
 export type BookCardMenuItem = {
@@ -42,10 +43,27 @@ export function BookCard({
   menuItems,
   className,
 }: BookCardProps) {
+  const [titleCover, setTitleCover] = useState<Blob | null>(null);
+
+  // Fallback: gradient + title (no file needed). Parent can pass a real
+  // EPUB/PDF cover via book.coverImage, which takes priority below.
+  useEffect(() => {
+    if (book.coverImage) return;
+    let cancelled = false;
+    void coverFromTitle(book.title, book.ext).then((blob) => {
+      if (!cancelled) setTitleCover(blob);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [book.coverImage, book.title, book.ext]);
+
+  const coverBlob = book.coverImage ?? titleCover;
+
   const coverUrl = useMemo(() => {
-    if (!book.coverImage) return null;
-    return URL.createObjectURL(book.coverImage);
-  }, [book.coverImage]);
+    if (!coverBlob) return null;
+    return URL.createObjectURL(coverBlob);
+  }, [coverBlob]);
 
   useEffect(() => {
     return () => {
@@ -55,7 +73,9 @@ export function BookCard({
 
   const percent = book.progressPercent ?? 0;
   const hasProgress = Boolean(book.lastOpenedAt) || percent > 0;
-  const rating = (book.rating ?? 0) as BookRating;
+  const personalRating = (book.rating ?? 0) as BookRating;
+  const averageRating = book.averageRating ?? 0;
+  const ratingValue = onRate ? personalRating : averageRating;
   const hasMenu = Boolean(menuItems?.length);
 
   return (
@@ -68,7 +88,7 @@ export function BookCard({
         aria-label={`${book.title} — ${book.ext.toUpperCase()}`}
       >
         {coverUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element -- blob: URLs from IndexedDB
+          // eslint-disable-next-line @next/next/no-img-element -- blob: URLs from canvas / file extract
           <img
             src={coverUrl}
             alt=""
@@ -79,7 +99,6 @@ export function BookCard({
           <>
             <div className="absolute inset-y-0 left-0 w-[10px] border-r border-white/10 bg-black/20" />
             <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.14)_0%,transparent_55%)]" />
-            <BookOpen className="absolute top-1/2 left-1/2 size-10 -translate-x-1/2 -translate-y-1/2 text-white opacity-40" />
           </>
         )}
 
@@ -207,8 +226,9 @@ export function BookCard({
       {showRating ? (
         <div className="mt-1 px-0.5">
           <StarRating
-            value={rating}
+            value={ratingValue}
             onChange={onRate}
+            showValue
             label={onRate ? "Your rating" : "Average rating"}
           />
         </div>

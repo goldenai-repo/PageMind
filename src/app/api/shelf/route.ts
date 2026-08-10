@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getCurrentUser } from "@/lib/firebase/auth-server";
-import { shelfCollection, shelfEntryFromDoc } from "@/lib/library-server";
+import { listUserBookEntries } from "@/lib/library-server";
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -9,7 +9,6 @@ export async function GET() {
     return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
   }
 
-  const snapshot = await shelfCollection(user.uid).get();
-  const entries = snapshot.docs.map(shelfEntryFromDoc);
+  const entries = await listUserBookEntries(user.uid);
   return NextResponse.json({ entries });
 }

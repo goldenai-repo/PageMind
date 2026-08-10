@@ -61,7 +61,7 @@ export async function POST(request: Request) {
 
   const id = crypto.randomUUID();
   const bytes = Buffer.from(await file.arrayBuffer());
-  const chunkCount = await saveBookFile(id, bytes);
+  const { storagePath } = await saveBookFile(id, bytes, ext);
 
   const count = (await booksCollection().count().get()).data().count;
   const doc: BookDoc = {
@@ -72,7 +72,9 @@ export async function POST(request: Request) {
     sizeBytes: file.size,
     addedAt: new Date().toISOString(),
     uploadedBy: user.uid,
-    chunkCount,
+    storagePath,
+    ratingSum: 0,
+    ratingCount: 0,
   };
   await booksCollection().doc(id).set(doc);
 
@@ -85,6 +87,8 @@ export async function POST(request: Request) {
         cover: doc.cover,
         size: doc.size,
         addedAt: doc.addedAt,
+        averageRating: 0,
+        ratingCount: 0,
       },
     },
     { status: 201 },

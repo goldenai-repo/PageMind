@@ -24,16 +24,24 @@ export async function GET(
     return NextResponse.json({ error: "Book not found." }, { status: 404 });
   }
 
-  const bytes = await loadBookFile(id);
-  const body = new Uint8Array(bytes).buffer;
+  try {
+    const bytes = await loadBookFile(id, doc);
+    const body = new Uint8Array(bytes).buffer;
 
-  return new Response(body, {
-    headers: {
-      "Content-Type": isBookExt(doc.ext)
-        ? BOOK_MIME[doc.ext]
-        : "application/octet-stream",
-      "Content-Length": String(body.byteLength),
-      "Cache-Control": "private, max-age=3600",
-    },
-  });
+    return new Response(body, {
+      headers: {
+        "Content-Type": isBookExt(doc.ext)
+          ? BOOK_MIME[doc.ext]
+          : "application/octet-stream",
+        "Content-Length": String(body.byteLength),
+        "Cache-Control": "private, max-age=3600",
+      },
+    });
+  } catch (err) {
+    console.error(`Failed to load book file ${id}:`, err);
+    return NextResponse.json(
+      { error: "Book file not found." },
+      { status: 404 },
+    );
+  }
 }

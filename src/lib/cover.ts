@@ -1,47 +1,56 @@
 import type { BookExt } from "@/lib/books";
 
 /**
- * Best-effort cover extraction / generation for shelf thumbnails.
- * EPUB: OPF cover meta / cover-image property / common cover.* names.
- * PDF: rasterize page 1 via pdf.js.
- * TXT: no embedded image → generate an A4-style title cover (canvas).
+ * Best-effort cover for shelf thumbnails.
+ * - EPUB: embedded cover when present, else title gradient
+ * - PDF: first page
+ * - TXT / no file bytes: title gradient (color from name)
  */
 export async function extractCoverImage(
-  file: File | ArrayBuffer | string,
+  file: File | ArrayBuffer | string | null | undefined,
   ext: BookExt,
   opts?: { title?: string },
 ): Promise<Blob | null> {
+  const title = opts?.title || "Untitled";
   try {
     if (ext === "txt") {
-      return generateTxtCover(opts?.title || "Untitled");
+      return generateTitleCover(title, "TXT");
     }
     if (ext === "epub") {
-      const bytes =
-        file instanceof File
-          ? await file.arrayBuffer()
-          : file instanceof ArrayBuffer
-            ? file
-            : null;
-      if (!bytes) return null;
-      return extractEpubCover(bytes);
+      const bytes = await toArrayBuffer(file);
+      if (!bytes) return generateTitleCover(title, "EPUB");
+      const embedded = await extractEpubCover(bytes);
+      return embedded ?? generateTitleCover(title, "EPUB");
     }
     if (ext === "pdf") {
-      const bytes =
-        file instanceof ArrayBuffer
-          ? file
-          : file instanceof File
-            ? await file.arrayBuffer()
-            : null;
-      if (!bytes) return null;
-      return extractPdfCover(bytes);
+      const bytes = await toArrayBuffer(file);
+      if (!bytes) return generateTitleCover(title, "PDF");
+      return (await extractPdfCover(bytes)) ?? generateTitleCover(title, "PDF");
     }
   } catch {
-    return null;
+    return generateTitleCover(title, ext.toUpperCase());
   }
+  return generateTitleCover(title, ext.toUpperCase());
+}
+
+/** Title gradient cover when we only have metadata (no file downloaded yet). */
+export async function coverFromTitle(
+  title: string,
+  ext: BookExt,
+): Promise<Blob | null> {
+  return generateTitleCover(title || "Untitled", ext.toUpperCase());
+}
+
+async function toArrayBuffer(
+  file: File | ArrayBuffer | string | null | undefined,
+): Promise<ArrayBuffer | null> {
+  if (!file) return null;
+  if (file instanceof ArrayBuffer) return file;
+  if (file instanceof File) return file.arrayBuffer();
   return null;
 }
 
-/** Deterministic navy-ish palette from title so the same TXT always looks the same. */
+/** Deterministic palette from title so the same book always looks the same. */
 function colorFromTitle(title: string): { bg: string; accent: string } {
   let hash = 0;
   for (let i = 0; i < title.length; i++) {
@@ -88,10 +97,13 @@ function wrapLines(
 }
 
 /**
- * Synthetic A4 cover for TXT: colored panel + wrapped title.
- * Stored as a JPEG blob so it behaves like EPUB/PDF covers on the shelf.
+ * Synthetic A4 cover: colored panel + wrapped title.
+ * Used for TXT and as fallback when EPUB/PDF have no usable image yet.
  */
-export async function generateTxtCover(title: string): Promise<Blob | null> {
+export async function generateTitleCover(
+  title: string,
+  badge = "TXT",
+): Promise<Blob | null> {
   if (typeof document === "undefined") return null;
 
   const w = 420;
@@ -136,11 +148,16 @@ export async function generateTxtCover(title: string): Promise<Blob | null> {
 
   ctx.font = "500 18px system-ui, sans-serif";
   ctx.fillStyle = "rgba(255,255,255,0.7)";
-  ctx.fillText("TXT", 48, h - 48);
+  ctx.fillText(badge, 48, h - 48);
 
   return new Promise((resolve) => {
     canvas.toBlob((blob) => resolve(blob), "image/jpeg", 0.88);
   });
+}
+
+/** @deprecated Use generateTitleCover */
+export async function generateTxtCover(title: string): Promise<Blob | null> {
+  return generateTitleCover(title, "TXT");
 }
 
 async function extractEpubCover(data: ArrayBuffer): Promise<Blob | null> {
