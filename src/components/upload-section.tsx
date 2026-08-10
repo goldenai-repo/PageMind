@@ -7,50 +7,72 @@ import { BookReader } from "@/components/book-reader";
 import { BookCard } from "@/components/book-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import type { LibraryBook } from "@/lib/books";
 import {
-  COVERS,
-  formatSize,
-  type BookExt,
-  type LibraryBook,
-} from "@/lib/books";
-import { extractCoverImage } from "@/lib/cover";
-import { deleteBook, loadBooks, saveBook } from "@/lib/storage";
+  applyShelfEntry,
+  coverImageForBook,
+  enrichEpubPdfCovers,
+  fetchLibraryBooks,
+  mergeMetaWithShelf,
+  openLibraryBook,
+  updateShelfEntry,
+  uploadBook,
+} from "@/lib/library-api";
 import { cn } from "@/lib/utils";
+import { saveCachedCover } from "@/lib/storage";
 
 function hasFiles(e: DragEvent | React.DragEvent) {
   return Array.from(e.dataTransfer?.types ?? []).includes("Files");
-}
-
-async function backfillCovers(
-  userId: string,
-  books: LibraryBook[],
-  setBooks: React.Dispatch<React.SetStateAction<LibraryBook[]>>,
-) {
-  for (const book of books) {
-    if (book.coverImage) continue;
-    const coverImage = await extractCoverImage(book.data, book.ext, {
-      title: book.title,
-    });
-    if (!coverImage) continue;
-    const updated = { ...book, coverImage };
-    setBooks((prev) => prev.map((b) => (b.id === book.id ? updated : b)));
-    void saveBook(userId, updated);
-  }
 }
 
 type SortKey = "recent" | "title";
 
 export function UploadSection({ userId }: { userId: string }) {
   const [books, setBooks] = useState<LibraryBook[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
   const [currentBook, setCurrentBook] = useState<LibraryBook | null>(null);
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("recent");
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
-  const booksRef = useRef(books);
 
+  const reload = useCallback(async () => {
+    const loaded = await fetchLibraryBooks();
+    setBooks(loaded);
+  }, []);
+
+  // Load catalog from Firestore (files live in Storage / legacy chunks).
   useEffect(() => {
-    booksRef.current = books;
-  }, [books]);
+    let cancelled = false;
+    const signal = { cancelled: false };
+    void (async () => {
+      try {
+        const loaded = await fetchLibraryBooks();
+        if (cancelled) return;
+        setBooks(loaded);
+        void enrichEpubPdfCovers(
+          loaded,
+          (bookId, coverImage) => {
+            if (signal.cancelled) return;
+            setBooks((prev) =>
+              prev.map((b) =>
+                b.id === bookId && !b.coverImage ? { ...b, coverImage } : b,
+              ),
+            );
+          },
+          signal,
+        );
+      } catch (err) {
+        console.error(err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      signal.cancelled = true;
+    };
+  }, [userId]);
 
   useEffect(() => {
     if (!menuOpenId) return;
@@ -71,104 +93,101 @@ export function UploadSection({ userId }: { userId: string }) {
     );
   }, [books, query, sortKey]);
 
-  useEffect(() => {
-    let cancelled = false;
-    loadBooks(userId)
-      .then((loaded) => {
-        if (cancelled) return;
-        setBooks(loaded);
-        void backfillCovers(userId, loaded, setBooks);
-      })
-      .catch(console.error);
-    return () => {
-      cancelled = true;
-    };
-  }, [userId]);
   const [dragActive, setDragActive] = useState(false);
   const [zoneActive, setZoneActive] = useState(false);
   const dragDepth = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const processFile = useCallback(
-    (file: File) => {
-      const ext = file.name.split(".").pop()?.toLowerCase();
-      if (!ext || !["pdf", "epub", "txt"].includes(ext)) {
-        alert(
-          `Unsupported format: .${ext}\nPageMind supports PDF, EPUB, and TXT.`,
-        );
-        return;
-      }
+  const processFile = useCallback(async (file: File) => {
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    if (!ext || !["pdf", "epub", "txt"].includes(ext)) {
+      alert(
+        `Unsupported format: .${ext}\nPageMind supports PDF, EPUB, and TXT.`,
+      );
+      return;
+    }
 
-      const pushBook = async (data: LibraryBook["data"]) => {
-        const bookExt = ext as BookExt;
-        const coverImage = await extractCoverImage(
-          bookExt === "epub" ? file : data,
-          bookExt,
-          { title: file.name.replace(/\.[^/.]+$/, "") },
-        );
-        const book: LibraryBook = {
-          id: `${Date.now()}_${Math.random().toString(36).slice(2)}`,
-          title: file.name.replace(/\.[^/.]+$/, ""),
-          ext: bookExt,
-          data,
-          cover: COVERS[booksRef.current.length % COVERS.length],
-          coverImage: coverImage ?? null,
-          size: formatSize(file.size),
-          addedAt: new Date(),
-        };
-        setBooks((prev) => [...prev, book]);
-        void saveBook(userId, book);
+    try {
+      const meta = await uploadBook(file);
+      const coverImage = await coverImageForBook(
+        { title: meta.title, ext: meta.ext, data: new ArrayBuffer(0) },
+        file,
+      );
+      const book = {
+        ...mergeMetaWithShelf(meta),
+        coverImage: coverImage ?? undefined,
       };
-
-      // EPUB: keep the raw File — JSZip reads it at open time (legacy behavior).
-      if (ext === "epub") {
-        void pushBook(file);
-        return;
+      if (coverImage) {
+        void saveCachedCover(book.id, coverImage).catch(console.error);
       }
-
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        if (ev.target?.result != null) {
-          void pushBook(ev.target.result as string | ArrayBuffer);
-        }
-      };
-      if (ext === "txt") reader.readAsText(file);
-      else reader.readAsArrayBuffer(file);
-    },
-    [userId],
-  );
+      setBooks((prev) => {
+        if (prev.some((b) => b.id === book.id)) return prev;
+        return [...prev, book];
+      });
+    } catch (err) {
+      console.error(err);
+      alert(err instanceof Error ? err.message : "Upload failed.");
+    }
+  }, []);
 
   const onFiles = useCallback(
-    (list: FileList | File[]) => {
-      Array.from(list).forEach(processFile);
+    async (list: FileList | File[]) => {
+      setUploading(true);
+      try {
+        for (const file of Array.from(list)) {
+          await processFile(file);
+        }
+      } finally {
+        setUploading(false);
+      }
     },
     [processFile],
   );
 
-  const openBook = (book: LibraryBook) => {
+  const openBook = async (book: LibraryBook) => {
     dragDepth.current = 0;
     setDragActive(false);
     setZoneActive(false);
-    const updated: LibraryBook = {
-      ...book,
-      inMyLibrary: true,
-      lastOpenedAt: new Date(),
-    };
-    setBooks((prev) => prev.map((b) => (b.id === book.id ? updated : b)));
-    void saveBook(userId, updated);
-    setCurrentBook(updated);
+    try {
+      const opened = await openLibraryBook(book);
+      setBooks((prev) =>
+        prev.map((b) =>
+          b.id === book.id
+            ? {
+                ...b,
+                inMyLibrary: true,
+                lastOpenedAt: opened.lastOpenedAt,
+                coverImage: opened.coverImage ?? b.coverImage,
+              }
+            : b,
+        ),
+      );
+      setCurrentBook(opened);
+    } catch (err) {
+      console.error(err);
+      alert(err instanceof Error ? err.message : "Could not open this book.");
+    }
   };
 
-  /** Temporary: permanently remove upload from IndexedDB (dev/test helper). */
-  const removeUploadedBook = (book: LibraryBook) => {
+  /** Temporary: permanently remove catalog book + Storage object. */
+  const removeUploadedBook = async (book: LibraryBook) => {
     setMenuOpenId(null);
     setBooks((prev) => prev.filter((b) => b.id !== book.id));
     if (currentBook?.id === book.id) setCurrentBook(null);
-    void deleteBook(userId, book.id);
+    try {
+      const res = await fetch(`/api/books/${book.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error ?? "Delete failed.");
+      }
+    } catch (err) {
+      console.error(err);
+      await reload().catch(console.error);
+      alert(err instanceof Error ? err.message : "Delete failed.");
+    }
   };
 
   useEffect(() => {
-    // Skip window DnD while the reader is open.
     if (currentBook) return;
 
     const onDragEnter = (e: DragEvent) => {
@@ -192,7 +211,7 @@ export function UploadSection({ userId }: { userId: string }) {
       e.preventDefault();
       dragDepth.current = 0;
       setDragActive(false);
-      if (e.dataTransfer?.files?.length) onFiles(e.dataTransfer.files);
+      if (e.dataTransfer?.files?.length) void onFiles(e.dataTransfer.files);
     };
 
     window.addEventListener("dragenter", onDragEnter);
@@ -232,13 +251,12 @@ export function UploadSection({ userId }: { userId: string }) {
       setZoneActive(false);
       setDragActive(false);
       dragDepth.current = 0;
-      if (e.dataTransfer.files?.length) onFiles(e.dataTransfer.files);
+      if (e.dataTransfer.files?.length) void onFiles(e.dataTransfer.files);
     },
   };
 
   return (
     <>
-      {/* Full-window overlay — only while dragging files over the page */}
       <div
         className={cn(
           "pointer-events-none fixed inset-0 z-[900] flex flex-col items-center justify-center gap-3 bg-navy/80 text-white opacity-0 backdrop-blur-sm transition-opacity duration-150",
@@ -254,17 +272,22 @@ export function UploadSection({ userId }: { userId: string }) {
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-[0.85rem] text-muted-foreground">
-            {books.length === 0
-              ? "No books yet — drop files below"
-              : query.trim()
-                ? `${visibleBooks.length} of ${books.length} ${books.length === 1 ? "book" : "books"} match`
-                : books.length === 1
-                  ? "1 book in your collection"
-                  : `${books.length} books in your collection`}
+            {loading
+              ? "Loading…"
+              : uploading
+                ? "Uploading…"
+                : books.length === 0
+                  ? "No books yet — drop files below"
+                  : query.trim()
+                    ? `${visibleBooks.length} of ${books.length} ${books.length === 1 ? "book" : "books"} match`
+                    : books.length === 1
+                      ? "1 book in your collection"
+                      : `${books.length} books in your collection`}
           </p>
         </div>
         <Button
           type="button"
+          disabled={uploading}
           onClick={() => fileInputRef.current?.click()}
           className="h-[42px] rounded-[6px] px-5 font-semibold shadow-[0_3px_12px_rgba(27,54,93,0.3)] hover:-translate-y-px"
         >
@@ -278,7 +301,7 @@ export function UploadSection({ userId }: { userId: string }) {
           multiple
           className="hidden"
           onChange={(e) => {
-            if (e.target.files?.length) onFiles(e.target.files);
+            if (e.target.files?.length) void onFiles(e.target.files);
             e.target.value = "";
           }}
         />
@@ -317,7 +340,12 @@ export function UploadSection({ userId }: { userId: string }) {
         </div>
       ) : null}
 
-      {books.length === 0 ? (
+      {loading ? (
+        <div className="flex flex-col items-center gap-3 py-16">
+          <div className="size-8 animate-spin rounded-full border-2 border-navy/20 border-t-navy" />
+          <p className="text-sm text-muted-foreground">Loading library…</p>
+        </div>
+      ) : books.length === 0 ? (
         <div
           {...zoneHandlers}
           className={cn(
@@ -340,10 +368,11 @@ export function UploadSection({ userId }: { userId: string }) {
           </p>
           <p className="max-w-80 text-[0.87rem] leading-relaxed text-muted-foreground">
             Drop a PDF, EPUB, or TXT anywhere on this page — or click below to
-            browse files.
+            browse files. Files are stored in Firebase Storage.
           </p>
           <Button
             type="button"
+            disabled={uploading}
             onClick={() => fileInputRef.current?.click()}
             className="mt-2 h-10 rounded-[6px] px-6 font-semibold shadow-[0_3px_12px_rgba(27,54,93,0.28)]"
           >
@@ -375,7 +404,8 @@ export function UploadSection({ userId }: { userId: string }) {
             <BookCard
               key={book.id}
               book={book}
-              onOpen={() => openBook(book)}
+              onOpen={() => void openBook(book)}
+              showRating
               menuOpen={menuOpenId === book.id}
               onMenuOpenChange={(open) =>
                 setMenuOpenId(open ? book.id : null)
@@ -384,7 +414,7 @@ export function UploadSection({ userId }: { userId: string }) {
                 {
                   label: "Delete upload",
                   danger: true,
-                  onSelect: () => removeUploadedBook(book),
+                  onSelect: () => void removeUploadedBook(book),
                 },
               ]}
             />
@@ -395,26 +425,27 @@ export function UploadSection({ userId }: { userId: string }) {
       {currentBook ? (
         <BookReader
           book={currentBook}
+          userId={userId}
           onClose={() => setCurrentBook(null)}
           onProgress={(progress) => {
-            setBooks((prev) => {
-              const current = prev.find((b) => b.id === currentBook.id);
-              if (!current) return prev;
-              const updated: LibraryBook = {
-                ...current,
-                inMyLibrary: true,
-                lastReadPage: progress.lastReadPage,
-                totalPages: progress.totalPages,
-                progressPercent: progress.progressPercent,
-                locator: progress.locator,
-                lastOpenedAt: new Date(),
-                ...(progress.progressPercent >= 100
-                  ? { status: "finished" as const }
-                  : {}),
-              };
-              void saveBook(userId, updated);
-              return prev.map((b) => (b.id === current.id ? updated : b));
-            });
+            setBooks((prev) =>
+              prev.map((b) =>
+                b.id === currentBook.id
+                  ? {
+                      ...b,
+                      inMyLibrary: true,
+                      lastReadPage: progress.lastReadPage,
+                      totalPages: progress.totalPages,
+                      progressPercent: progress.progressPercent,
+                      locator: progress.locator,
+                      lastOpenedAt: new Date(),
+                      ...(progress.progressPercent >= 100
+                        ? { status: "finished" as const }
+                        : {}),
+                    }
+                  : b,
+              ),
+            );
             setCurrentBook((current) =>
               current
                 ? {
@@ -426,6 +457,15 @@ export function UploadSection({ userId }: { userId: string }) {
                   }
                 : current,
             );
+            void updateShelfEntry(currentBook.id, { progress })
+              .then((entry) => {
+                setBooks((prev) =>
+                  prev.map((b) =>
+                    b.id === currentBook.id ? applyShelfEntry(b, entry) : b,
+                  ),
+                );
+              })
+              .catch(console.error);
           }}
         />
       ) : null}

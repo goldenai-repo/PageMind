@@ -14,29 +14,18 @@ import {
   type LibraryShelf,
   type ReadingProgressUpdate,
 } from "@/lib/books";
-import { extractCoverImage } from "@/lib/cover";
-import { loadBooks, saveBook } from "@/lib/storage";
+import {
+  applyShelfEntry,
+  enrichEpubPdfCovers,
+  fetchLibraryBooks,
+  migrateLocalBooks,
+  openLibraryBook,
+  removeShelfEntry,
+  updateShelfEntry,
+} from "@/lib/library-api";
 
 function bookStatus(book: LibraryBook): BookStatus | undefined {
   return book.status;
-}
-
-/** Fill coverImage for older books that only have a gradient. */
-async function backfillCovers(
-  userId: string,
-  books: LibraryBook[],
-  setBooks: React.Dispatch<React.SetStateAction<LibraryBook[]>>,
-) {
-  for (const book of books) {
-    if (book.coverImage) continue;
-    const coverImage = await extractCoverImage(book.data, book.ext, {
-      title: book.title,
-    });
-    if (!coverImage) continue;
-    const updated = { ...book, coverImage };
-    setBooks((prev) => prev.map((b) => (b.id === book.id ? updated : b)));
-    void saveBook(userId, updated);
-  }
 }
 
 function matchesShelf(book: LibraryBook, shelf: LibraryShelf) {
@@ -62,22 +51,50 @@ export function LibrarySection({
   shelf?: LibraryShelf;
 }) {
   const [books, setBooks] = useState<LibraryBook[]>([]);
-  const [currentBookId, setCurrentBookId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [currentBook, setCurrentBook] = useState<LibraryBook | null>(null);
+  const [openingId, setOpeningId] = useState<string | null>(null);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
 
+  // Load shared catalog + personal shelf from the API (cloud source of truth).
   useEffect(() => {
     let cancelled = false;
-    loadBooks(userId)
-      .then((loaded) => {
+    const signal = { cancelled: false };
+    void (async () => {
+      try {
+        await migrateLocalBooks().catch(console.error);
+        const loaded = await fetchLibraryBooks();
         if (cancelled) return;
         setBooks(loaded);
-        void backfillCovers(userId, loaded, setBooks);
-      })
-      .catch(console.error);
+        void enrichEpubPdfCovers(
+          loaded,
+          (bookId, coverImage) => {
+            if (signal.cancelled) return;
+            setBooks((prev) =>
+              prev.map((b) =>
+                b.id === bookId && !b.coverImage ? { ...b, coverImage } : b,
+              ),
+            );
+          },
+          signal,
+        );
+      } catch (err) {
+        console.error(err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
     return () => {
       cancelled = true;
+      signal.cancelled = true;
     };
   }, [userId]);
+
+  const reload = useCallback(async () => {
+    await migrateLocalBooks().catch(console.error);
+    const loaded = await fetchLibraryBooks();
+    setBooks(loaded);
+  }, []);
 
   useEffect(() => {
     if (!menuOpenId) return;
@@ -92,55 +109,116 @@ export function LibrarySection({
       .sort((a, b) => b.addedAt.getTime() - a.addedAt.getTime());
   }, [books, shelf]);
 
-  const currentBook = useMemo(
-    () => books.find((b) => b.id === currentBookId) ?? null,
-    [books, currentBookId],
-  );
-
-  const updateBook = (book: LibraryBook, patch: Partial<LibraryBook>) => {
-    const updated: LibraryBook = { ...book, ...patch };
-    if ("status" in patch && patch.status === undefined) {
-      delete updated.status;
-    }
-    setBooks((prev) => prev.map((b) => (b.id === book.id ? updated : b)));
-    void saveBook(userId, updated);
+  const patchBook = async (
+    book: LibraryBook,
+    patch: Parameters<typeof updateShelfEntry>[1],
+    local: Partial<LibraryBook>,
+  ) => {
+    setBooks((prev) =>
+      prev.map((b) => (b.id === book.id ? { ...b, ...local } : b)),
+    );
     setMenuOpenId(null);
-    return updated;
+    try {
+      const entry = await updateShelfEntry(book.id, patch);
+      setBooks((prev) =>
+        prev.map((b) => {
+          if (b.id !== book.id) return b;
+          const next = applyShelfEntry(b, entry);
+          return {
+            ...next,
+            ...(typeof entry.averageRating === "number"
+              ? {
+                  averageRating: entry.averageRating,
+                  ratingCount: entry.ratingCount ?? b.ratingCount,
+                }
+              : {}),
+          };
+        }),
+      );
+    } catch (err) {
+      console.error(err);
+      await reload().catch(console.error);
+    }
   };
 
-  const openBook = (book: LibraryBook) => {
-    updateBook(book, {
-      inMyLibrary: true,
-      lastOpenedAt: book.lastOpenedAt ?? new Date(),
+  const openBook = async (book: LibraryBook) => {
+    if (openingId) return;
+    setOpeningId(book.id);
+    try {
+      const opened = await openLibraryBook(book);
+      setBooks((prev) =>
+        prev.map((b) =>
+          b.id === book.id
+            ? {
+                ...b,
+                inMyLibrary: true,
+                lastOpenedAt: opened.lastOpenedAt,
+                coverImage: opened.coverImage ?? b.coverImage,
+                progressPercent: opened.progressPercent ?? b.progressPercent,
+                lastReadPage: opened.lastReadPage ?? b.lastReadPage,
+                locator: opened.locator ?? b.locator,
+                rating: opened.rating ?? b.rating,
+                favorite: opened.favorite ?? b.favorite,
+                status: opened.status ?? b.status,
+              }
+            : b,
+        ),
+      );
+      setCurrentBook(opened);
+    } catch (err) {
+      console.error(err);
+      alert(err instanceof Error ? err.message : "Could not open this book.");
+    } finally {
+      setOpeningId(null);
+    }
+  };
+
+  const onProgress = useCallback((progress: ReadingProgressUpdate) => {
+    setCurrentBook((cur) => {
+      if (!cur) return cur;
+      const updated: LibraryBook = {
+        ...cur,
+        inMyLibrary: true,
+        lastReadPage: progress.lastReadPage,
+        totalPages: progress.totalPages,
+        progressPercent: progress.progressPercent,
+        locator: progress.locator,
+        lastOpenedAt: new Date(),
+        ...(progress.progressPercent >= 100
+          ? { status: "finished" as const }
+          : {}),
+      };
+      setBooks((prev) =>
+        prev.map((b) =>
+          b.id === updated.id
+            ? {
+                ...b,
+                inMyLibrary: true,
+                lastReadPage: updated.lastReadPage,
+                totalPages: updated.totalPages,
+                progressPercent: updated.progressPercent,
+                locator: updated.locator,
+                lastOpenedAt: updated.lastOpenedAt,
+                status: updated.status,
+              }
+            : b,
+        ),
+      );
+      void updateShelfEntry(updated.id, { progress }).catch(console.error);
+      return updated;
     });
-    setCurrentBookId(book.id);
-  };
-
-  const onProgress = useCallback(
-    (progress: ReadingProgressUpdate) => {
-      setBooks((prev) => {
-        const current = prev.find((b) => b.id === currentBookId);
-        if (!current) return prev;
-        const updated: LibraryBook = {
-          ...current,
-          inMyLibrary: true,
-          lastReadPage: progress.lastReadPage,
-          totalPages: progress.totalPages,
-          progressPercent: progress.progressPercent,
-          locator: progress.locator,
-          lastOpenedAt: new Date(),
-          ...(progress.progressPercent >= 100
-            ? { status: "finished" as const }
-            : {}),
-        };
-        void saveBook(userId, updated);
-        return prev.map((b) => (b.id === current.id ? updated : b));
-      });
-    },
-    [currentBookId, userId],
-  );
+  }, []);
 
   const isHome = shelf === "home";
+
+  if (loading) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 py-20 text-center">
+        <div className="size-8 animate-spin rounded-full border-2 border-navy/20 border-t-navy" />
+        <p className="text-sm text-muted-foreground">Loading library…</p>
+      </div>
+    );
+  }
 
   if (visibleBooks.length === 0) {
     const emptyLabel =
@@ -174,7 +252,11 @@ export function LibrarySection({
                       {
                         label: "Add to My Books",
                         onSelect: () =>
-                          updateBook(book, { inMyLibrary: true }),
+                          void patchBook(
+                            book,
+                            { inMyLibrary: true },
+                            { inMyLibrary: true },
+                          ),
                       },
                     ]
                   : []),
@@ -183,18 +265,26 @@ export function LibrarySection({
                     ? "Remove Favorite"
                     : "Add to Favorite",
                   onSelect: () =>
-                    updateBook(book, {
-                      favorite: !book.favorite,
-                      ...(book.favorite ? {} : { inMyLibrary: true }),
-                    }),
+                    void patchBook(
+                      book,
+                      {
+                        favorite: !book.favorite,
+                        ...(book.favorite ? {} : { inMyLibrary: true }),
+                      },
+                      {
+                        favorite: !book.favorite,
+                        ...(book.favorite ? {} : { inMyLibrary: true }),
+                      },
+                    ),
                 },
                 {
                   label: "Add to Want to Read",
                   onSelect: () =>
-                    updateBook(book, {
-                      status: "want",
-                      inMyLibrary: true,
-                    }),
+                    void patchBook(
+                      book,
+                      { status: "want", inMyLibrary: true },
+                      { status: "want", inMyLibrary: true },
+                    ),
                 },
               ]
             : [
@@ -203,24 +293,56 @@ export function LibrarySection({
                     ? "Remove Favorite"
                     : "Add to Favorite",
                   onSelect: () =>
-                    updateBook(book, {
-                      favorite: !book.favorite,
-                      ...(book.favorite ? {} : { inMyLibrary: true }),
-                    }),
+                    void patchBook(
+                      book,
+                      {
+                        favorite: !book.favorite,
+                        ...(book.favorite ? {} : { inMyLibrary: true }),
+                      },
+                      {
+                        favorite: !book.favorite,
+                        ...(book.favorite ? {} : { inMyLibrary: true }),
+                      },
+                    ),
                 },
                 {
                   label: "Want to Read",
                   onSelect: () =>
-                    updateBook(book, {
-                      status: "want",
-                      inMyLibrary: true,
-                    }),
+                    void patchBook(
+                      book,
+                      { status: "want", inMyLibrary: true },
+                      { status: "want", inMyLibrary: true },
+                    ),
                 },
                 {
                   label: "Delete",
                   danger: true,
-                  onSelect: () =>
-                    updateBook(book, removeFromMyLibrary(book)),
+                  onSelect: () => {
+                    const cleared = removeFromMyLibrary(book);
+                    setBooks((prev) =>
+                      prev.map((b) =>
+                        b.id === book.id ? { ...b, ...cleared } : b,
+                      ),
+                    );
+                    setMenuOpenId(null);
+                    void removeShelfEntry(book.id)
+                      .then((entry) => {
+                        setBooks((prev) =>
+                          prev.map((b) =>
+                            b.id === book.id
+                              ? applyShelfEntry(
+                                  { ...b, ...removeFromMyLibrary(b) },
+                                  entry,
+                                )
+                              : b,
+                          ),
+                        );
+                      })
+                      .catch(async (err) => {
+                        console.error(err);
+                        await reload().catch(console.error);
+                      });
+                  },
                 },
               ];
 
@@ -228,14 +350,14 @@ export function LibrarySection({
             <BookCard
               key={book.id}
               book={book}
-              onOpen={() => openBook(book)}
-              // Progress is per-user — hide on Home (shared catalog later).
+              onOpen={() => void openBook(book)}
               showProgress={!isHome}
               showRating
               onRate={
                 isHome
                   ? undefined
-                  : (rating: BookRating) => updateBook(book, { rating })
+                  : (rating: BookRating) =>
+                      void patchBook(book, { rating }, { rating })
               }
               menuOpen={menuOpenId === book.id}
               onMenuOpenChange={(open) =>
@@ -250,7 +372,8 @@ export function LibrarySection({
       {currentBook ? (
         <BookReader
           book={currentBook}
-          onClose={() => setCurrentBookId(null)}
+          userId={userId}
+          onClose={() => setCurrentBook(null)}
           onProgress={onProgress}
         />
       ) : null}

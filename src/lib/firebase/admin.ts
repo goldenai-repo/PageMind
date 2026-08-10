@@ -1,6 +1,8 @@
 import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
 import { getAuth, type Auth } from "firebase-admin/auth";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
+import { getStorage, type Storage } from "firebase-admin/storage";
+import type { Bucket } from "@google-cloud/storage";
 
 /** Normalize PEM from .env / Doppler (quotes, escaped newlines, whitespace). */
 function normalizePrivateKey(raw: string): string {
@@ -15,6 +17,21 @@ function normalizePrivateKey(raw: string): string {
   // Turn literal \n into real newlines (common in single-line env values)
   key = key.replace(/\\n/g, "\n").trim();
   return key;
+}
+
+/** Bucket id without `gs://` — matches NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET. */
+export function getStorageBucketName(): string {
+  const raw =
+    process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET?.trim() ||
+    process.env.FIREBASE_STORAGE_BUCKET?.trim() ||
+    "";
+  const name = raw.replace(/^gs:\/\//, "");
+  if (!name) {
+    throw new Error(
+      "Missing storage bucket. Set NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET.",
+    );
+  }
+  return name;
 }
 
 function getAdminApp(): App {
@@ -36,6 +53,7 @@ function getAdminApp(): App {
 
   return initializeApp({
     credential: cert({ projectId, clientEmail, privateKey }),
+    storageBucket: getStorageBucketName(),
   });
 }
 
@@ -45,4 +63,12 @@ export function getAdminAuth(): Auth {
 
 export function getAdminFirestore(): Firestore {
   return getFirestore(getAdminApp());
+}
+
+export function getAdminStorage(): Storage {
+  return getStorage(getAdminApp());
+}
+
+export function getAdminBucket(): Bucket {
+  return getAdminStorage().bucket(getStorageBucketName());
 }

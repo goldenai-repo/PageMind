@@ -62,6 +62,10 @@ export type BookMeta = {
   coverImage?: Blob | null;
   size: string;
   addedAt: Date;
+  /** Community average (Home). 0 when no ratings. */
+  averageRating?: number;
+  /** How many users rated this book. */
+  ratingCount?: number;
 };
 
 /** Wire format for BookMeta over the API. */
@@ -77,7 +81,7 @@ export type LibraryBook = BookMeta & {
   /** Reading status within My Library */
   status?: BookStatus;
   favorite?: boolean;
-  /** Personal rating; 0 = unrated */
+  /** Personal rating; 0 = unrated (My Library only) */
   rating?: BookRating;
   /** 1-based last page (PDF) or page-in-section (reflowable) */
   lastReadPage?: number;
@@ -95,12 +99,21 @@ export type ReadingProgressUpdate = {
   locator: ReadingLocator;
 };
 
-/** Per-user shelf state for one book (shared-library API). Dates are ISO 8601. */
+/** Per-user shelf / reading state for one book. Dates are ISO 8601. */
 export type ShelfEntry = {
   bookId: string;
   archived: boolean;
   lastReadAt: string | null;
   updatedAt: string;
+  inMyLibrary?: boolean;
+  favorite?: boolean;
+  status?: BookStatus | null;
+  rating?: BookRating;
+  lastReadPage?: number;
+  totalPages?: number | null;
+  progressPercent?: number;
+  locator?: ReadingLocator | null;
+  lastOpenedAt?: string | null;
 };
 
 export function formatSize(bytes: number) {
@@ -167,12 +180,13 @@ export function normalizeLibraryBook(book: LibraryBook): LibraryBook {
   };
 }
 
-/** Remove from My Books only — catalog row stays on Home. */
+/** Remove from My Books only — keep rating/progress; catalog row stays on Home. */
 export function removeFromMyLibrary(book: LibraryBook): LibraryBook {
   return {
     ...book,
     inMyLibrary: false,
     favorite: false,
     status: undefined,
+    // rating intentionally preserved
   };
 }

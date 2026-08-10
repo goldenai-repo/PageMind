@@ -269,18 +269,33 @@ export async function mountEpubReader(
         ? { sectionIdx: entry.sectionIdx, fragment: entry.fragment }
         : null;
     },
-    tocActive: (idx) =>
-      resolvedToc.find((t) => t.sectionIdx === idx)?.id ?? null,
+    tocActive: (idx) => {
+      // Exact chapter for this spine item.
+      const exact = resolvedToc.find((t) => t.sectionIdx === idx);
+      if (exact) return exact.id;
+      // Spine sections with no TOC row (common) → keep highlighting the
+      // nearest previous chapter so the sidebar always shows where you are.
+      let nearest: (typeof resolvedToc)[number] | null = null;
+      for (const t of resolvedToc) {
+        if (t.sectionIdx <= idx) nearest = t;
+      }
+      return nearest?.id ?? null;
+    },
     onToc,
     onTocActive,
     label: ({ sectionIdx, page, pageCount, mode: m }) => {
-      const item = spine[sectionIdx];
-      const tocMatch = tocEntries.find((e) =>
-        item.href.endsWith(e.href.split("#")[0]),
-      );
-      const base = tocMatch
-        ? tocMatch.label
-        : `Part ${sectionIdx + 1} of ${spine.length}`;
+      const fromResolved = resolvedToc.find((t) => t.sectionIdx === sectionIdx);
+      let base = fromResolved?.label;
+      if (!base) {
+        const item = spine[sectionIdx];
+        const file = item.href.split("#")[0]!;
+        const fromEntries = tocEntries.find((e) => {
+          const href = e.href.split("#")[0]!;
+          return file === href || file.endsWith(href) || href.endsWith(file);
+        });
+        base = fromEntries?.label;
+      }
+      if (!base) base = `Part ${sectionIdx + 1} of ${spine.length}`;
       if (m === "scroll") return base;
       const suffix = pageCount > 1 ? ` · ${page + 1}/${pageCount}` : "";
       return base + suffix;
