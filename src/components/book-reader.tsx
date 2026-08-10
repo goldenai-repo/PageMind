@@ -13,10 +13,11 @@ import {
 
 import { Button } from "@/components/ui/button";
 import type { LibraryBook, ReadingProgressUpdate } from "@/lib/books";
-import { fetchTipsForBook } from "@/lib/library-api";
+import { fetchTipsForBook, fetchUserPrefs, saveUserPrefs } from "@/lib/library-api";
 import { mountEpubReader } from "@/lib/readers/epub-engine";
 import { mountPdfReader } from "@/lib/readers/pdf";
 import {
+  bindReaderModeUser,
   getReaderModeServerSnapshot,
   getReaderModeSnapshot,
   setReaderMode,
@@ -45,11 +46,13 @@ const READER_MODE_OPTIONS: {
 type BookReaderProps = {
   book: LibraryBook;
   onClose: () => void;
+  /** Used to scope local mode prefs per account. */
+  userId?: string;
   /** Debounced by the parent if needed; called on page/section changes. */
   onProgress?: (progress: ReadingProgressUpdate) => void;
 };
 
-export function BookReader({ book, onClose, onProgress }: BookReaderProps) {
+export function BookReader({ book, onClose, userId, onProgress }: BookReaderProps) {
   const contentRef = useRef<HTMLDivElement>(null);
   const renditionRef = useRef<ReaderRendition | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -79,6 +82,21 @@ export function BookReader({ book, onClose, onProgress }: BookReaderProps) {
     pageLabel: "",
   });
 
+  // Load this user's reading layout from Firestore (also keeps localStorage).
+  useEffect(() => {
+    if (userId) bindReaderModeUser(userId);
+    let cancelled = false;
+    void fetchUserPrefs()
+      .then((prefs) => {
+        if (cancelled) return;
+        setReaderMode(prefs.readerMode);
+      })
+      .catch(console.error);
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
   const [tips, setTips] = useState<TipCard[]>([]);
   const [visibleTips, setVisibleTips] = useState<TipCard[]>([]);
   const [notesOpen, setNotesOpen] = useState(true);
@@ -94,8 +112,7 @@ export function BookReader({ book, onClose, onProgress }: BookReaderProps) {
 
   useEffect(() => {
     let cancelled = false;
-    setTipsLoading(true);
-    fetchTipsForBook(book.id)
+    void fetchTipsForBook(book.id)
       .then((loaded) => {
         if (cancelled) return;
         setTips(loaded);
@@ -355,6 +372,7 @@ export function BookReader({ book, onClose, onProgress }: BookReaderProps) {
     if (next === mode) return;
     // Updates the store → re-render → the [mode] effect applies it.
     setReaderMode(next);
+    void saveUserPrefs({ readerMode: next }).catch(console.error);
   };
 
   const hasToc = toc.length > 0;

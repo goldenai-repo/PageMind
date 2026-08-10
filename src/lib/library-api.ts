@@ -296,3 +296,25 @@ export async function migrateLocalBooks(): Promise<BookMeta[]> {
   }
   return uploaded;
 }
+
+export type UserPrefsJson = {
+  readerMode: "flip" | "scroll" | "spread";
+};
+
+export async function fetchUserPrefs(): Promise<UserPrefsJson> {
+  const res = await fetch("/api/user/prefs");
+  const data = await readJson<{ prefs: UserPrefsJson }>(res);
+  return data.prefs;
+}
+
+export async function saveUserPrefs(
+  patch: Partial<UserPrefsJson>,
+): Promise<UserPrefsJson> {
+  const res = await fetch("/api/user/prefs", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  const data = await readJson<{ prefs: UserPrefsJson }>(res);
+  return data.prefs;
+}

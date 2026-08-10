@@ -253,8 +253,8 @@ export function createFlowReader(options: FlowReaderOptions): FlowReader {
   }
 
   // Tap left quarter → previous page, elsewhere → next page.
-  function attachTapNav() {
-    const el = cardEl;
+  // Used for single-page and two-page (spread) modes.
+  function attachTapNav(el: HTMLElement | null = cardEl) {
     if (!el) return;
     const handler = (e: MouseEvent) => {
       const target = e.target as HTMLElement | null;
@@ -445,11 +445,14 @@ export function createFlowReader(options: FlowReaderOptions): FlowReader {
       }
       flip = handle;
       emitFlipNav();
+      // Same click zones as single-page: left → prev, right → next.
+      attachTapNav(contentEl);
       watchFlipResize(mySeq);
     } catch {
       // StPageFlip failed — restore the paginated two-column view.
       if (mySeq !== seq || destroyed) return;
       renderPaginated(2, opts);
+      attachTapNav();
     }
   }
 
@@ -480,6 +483,7 @@ export function createFlowReader(options: FlowReaderOptions): FlowReader {
       // Robust paginated base (also the jsdom/test path), upgraded to the
       // StPageFlip two-page book when the environment supports it.
       renderPaginated(2, opts);
+      attachTapNav();
       void upgradeToFlip(mySeq, opts);
     } else {
       // Single page: paginated one column, advance by tapping the page.

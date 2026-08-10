@@ -28,9 +28,9 @@ export async function extractCoverImage(
       return (await extractPdfCover(bytes)) ?? generateTitleCover(title, "PDF");
     }
   } catch {
-    return generateTitleCover(title, ext.toUpperCase());
+    return generateTitleCover(title, String(ext).toUpperCase());
   }
-  return generateTitleCover(title, ext.toUpperCase());
+  return generateTitleCover(title, String(ext).toUpperCase());
 }
 
 /** Title gradient cover when we only have metadata (no file downloaded yet). */

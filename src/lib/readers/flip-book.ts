@@ -91,7 +91,9 @@ export async function mountFlipBook(
     clickEventForward: true,
     swipeDistance: 30,
     showPageCorners: true,
-    disableFlipByClick: false,
+    // We handle click zones ourselves (left = prev, right = next) so
+    // behavior matches single-page mode and we don't double-flip.
+    disableFlipByClick: true,
   });
 
   flip.loadFromHTML(pages);

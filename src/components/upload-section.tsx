@@ -425,6 +425,7 @@ export function UploadSection({ userId }: { userId: string }) {
       {currentBook ? (
         <BookReader
           book={currentBook}
+          userId={userId}
           onClose={() => setCurrentBook(null)}
           onProgress={(progress) => {
             setBooks((prev) =>

@@ -357,6 +357,7 @@ export function LibrarySection({
       {currentBook ? (
         <BookReader
           book={currentBook}
+          userId={userId}
           onClose={() => setCurrentBook(null)}
           onProgress={onProgress}
         />

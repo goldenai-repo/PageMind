@@ -14,6 +14,10 @@ import {
   type ShelfEntry,
 } from "./books";
 import { getAdminBucket, getAdminFirestore } from "./firebase/admin";
+import {
+  isReaderMode,
+  type ReaderMode,
+} from "./readers/reader-mode";
 
 /**
  * Legacy path: book bytes in `books/{id}/chunks/{index}` (Spark-era workaround).
@@ -295,3 +299,45 @@ export async function listUserBookEntries(uid: string): Promise<ShelfEntry[]> {
   }
   return [...byId.values()];
 }
+
+/** Per-user reading preferences (`users/{uid}`). */
+export type UserPrefs = {
+  readerMode: ReaderMode;
+};
+
+const DEFAULT_PREFS: UserPrefs = {
+  readerMode: "flip",
+};
+
+export function userDocRef(uid: string) {
+  return getAdminFirestore().collection("users").doc(uid);
+}
+
+export async function getUserPrefs(uid: string): Promise<UserPrefs> {
+  const snap = await userDocRef(uid).get();
+  const data = snap.data() as { readerMode?: unknown } | undefined;
+  return {
+    readerMode: isReaderMode(data?.readerMode)
+      ? data.readerMode
+      : DEFAULT_PREFS.readerMode,
+  };
+}
+
+export async function setUserPrefs(
+  uid: string,
+  patch: Partial<UserPrefs>,
+): Promise<UserPrefs> {
+  const update: Record<string, unknown> = {
+    updatedAt: new Date().toISOString(),
+  };
+  if (patch.readerMode !== undefined) {
+    if (!isReaderMode(patch.readerMode)) {
+      throw new Error("Invalid readerMode.");
+    }
+    update.readerMode = patch.readerMode;
+  }
+  await userDocRef(uid).set(update, { merge: true });
+  return getUserPrefs(uid);
+}
+
+export { isReaderMode };
