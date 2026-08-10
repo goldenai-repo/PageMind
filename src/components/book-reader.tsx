@@ -513,6 +513,11 @@ export function BookReader({ book, onClose, userId, onProgress }: BookReaderProp
                     "toc-link",
                     activeTocId === item.id && "active",
                   )}
+                  style={
+                    activeTocId === item.id
+                      ? { background: "#1B365D", color: "#fff" }
+                      : undefined
+                  }
                 >
                   {item.label}
                 </button>

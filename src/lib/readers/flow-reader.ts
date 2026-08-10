@@ -148,6 +148,7 @@ export function createFlowReader(options: FlowReaderOptions): FlowReader {
       sectionIdx,
       sectionCount,
     });
+    onTocActive?.(tocActive?.(sectionIdx) ?? null);
   }
 
   function emitFlipNav() {
@@ -169,6 +170,7 @@ export function createFlowReader(options: FlowReaderOptions): FlowReader {
       sectionIdx,
       sectionCount,
     });
+    onTocActive?.(tocActive?.(sectionIdx) ?? null);
   }
 
   function detachTap() {

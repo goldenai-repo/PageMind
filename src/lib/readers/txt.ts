@@ -3,7 +3,6 @@ import type { ReaderMode } from "./reader-mode";
 import type {
   ReaderNavState,
   ReaderRendition,
-  ReaderTocItem,
 } from "./types";
 
 export type TxtMountOptions = {
@@ -56,18 +55,6 @@ function escapeHtml(text: string): string {
     .replace(/>/g, "&gt;");
 }
 
-/** First non-empty line of a section, trimmed for use as a sidebar label. */
-function sectionLabel(section: string, idx: number): string {
-  const firstLine = section
-    .split("\n")
-    .map((l) => l.trim())
-    .find((l) => l.length > 0);
-  if (firstLine) {
-    return firstLine.length > 40 ? firstLine.slice(0, 40) + "…" : firstLine;
-  }
-  return `Part ${idx + 1}`;
-}
-
 export function mountTxtReader(options: TxtMountOptions): ReaderRendition {
   const {
     text,
@@ -80,15 +67,9 @@ export function mountTxtReader(options: TxtMountOptions): ReaderRendition {
     onTocActive,
     sectionSize,
   } = options;
+  // Sections are only a layout/performance split — not real chapters.
+  // Do not invent a Contents sidebar for TXT.
   const sections = splitIntoSections(text, sectionSize);
-
-  const toc: ReaderTocItem[] = sections.map((section, idx) => ({
-    id: `part-${idx}`,
-    label:
-      sections.length > 1
-        ? `Part ${idx + 1} — ${sectionLabel(section, idx)}`
-        : sectionLabel(section, idx),
-  }));
 
   const reader = createFlowReader({
     contentEl,
@@ -101,23 +82,12 @@ export function mountTxtReader(options: TxtMountOptions): ReaderRendition {
     card: { className: "reader-txt" },
     fontSizeTarget: "pager",
     onNavChange,
-    toc,
-    tocTarget: (id) => {
-      const idx = Number(id.replace("part-", ""));
-      return Number.isInteger(idx) ? { sectionIdx: idx } : null;
-    },
-    tocActive: (idx) => `part-${idx}`,
+    toc: [],
     onToc,
     onTocActive,
-    label: ({ sectionIdx, page, pageCount, mode: m }) => {
-      const many = sections.length > 1;
-      const part = many ? ` · Part ${sectionIdx + 1}/${sections.length}` : "";
-      if (m === "scroll") {
-        return many
-          ? `Part ${sectionIdx + 1}/${sections.length}`
-          : "Continuous scroll";
-      }
-      return `Page ${page + 1} of ${pageCount}${part}`;
+    label: ({ page, pageCount, mode: m }) => {
+      if (m === "scroll") return "Continuous scroll";
+      return `Page ${page + 1} of ${pageCount}`;
     },
   });
 

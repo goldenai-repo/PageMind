@@ -94,7 +94,7 @@ describe("mountTxtReader", () => {
     expect(onNavChange).toHaveBeenLastCalledWith(
       expect.objectContaining({
         canPrev: true,
-        pageLabel: expect.stringContaining("Part 2/"),
+        pageLabel: expect.stringMatching(/^Page \d+ of \d+$/),
       }),
     );
 
@@ -102,6 +102,18 @@ describe("mountTxtReader", () => {
     expect(onNavChange).toHaveBeenLastCalledWith(
       expect.objectContaining({ canPrev: false }),
     );
+  });
+
+  it("does not invent a Contents sidebar for TXT", () => {
+    const onToc = vi.fn();
+    mountTxtReader({
+      text: "a".repeat(500) + "\n\n" + "b".repeat(500),
+      contentEl: document.createElement("div"),
+      fontSize: 18,
+      onToc,
+      sectionSize: 200,
+    });
+    expect(onToc).toHaveBeenCalledWith([]);
   });
 
   it("destroy() is safe to call", () => {
