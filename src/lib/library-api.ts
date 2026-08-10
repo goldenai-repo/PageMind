@@ -99,10 +99,11 @@ export async function updateShelfEntry(
   };
 }
 
-/** Soft-remove from My Library (catalog book stays on Home). */
-export async function removeShelfEntry(bookId: string): Promise<void> {
+/** Soft-remove from My Library (catalog book stays on Home; rating kept). */
+export async function removeShelfEntry(bookId: string): Promise<ShelfEntry> {
   const res = await fetch(`/api/shelf/${bookId}`, { method: "DELETE" });
-  await readJson<{ ok: boolean }>(res);
+  const data = await readJson<{ ok: boolean; entry: ShelfEntry }>(res);
+  return data.entry;
 }
 
 function decodeBookData(meta: BookMeta, bytes: ArrayBuffer): LibraryBook["data"] {
@@ -259,7 +260,8 @@ export function applyShelfEntry(
     inMyLibrary: entry.inMyLibrary ?? isInMyLibrary(book),
     favorite: entry.favorite,
     status: entry.status ?? undefined,
-    rating: entry.rating ?? book.rating,
+    // Always take server personal rating (including 0 = cleared by user).
+    rating: (entry.rating ?? 0) as BookRating,
     lastReadPage: entry.lastReadPage ?? book.lastReadPage,
     totalPages: entry.totalPages ?? book.totalPages,
     progressPercent: entry.progressPercent ?? book.progressPercent,

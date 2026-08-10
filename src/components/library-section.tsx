@@ -320,13 +320,28 @@ export function LibrarySection({
                   onSelect: () => {
                     const cleared = removeFromMyLibrary(book);
                     setBooks((prev) =>
-                      prev.map((b) => (b.id === book.id ? { ...b, ...cleared } : b)),
+                      prev.map((b) =>
+                        b.id === book.id ? { ...b, ...cleared } : b,
+                      ),
                     );
                     setMenuOpenId(null);
-                    void removeShelfEntry(book.id).catch(async (err) => {
-                      console.error(err);
-                      await reload().catch(console.error);
-                    });
+                    void removeShelfEntry(book.id)
+                      .then((entry) => {
+                        setBooks((prev) =>
+                          prev.map((b) =>
+                            b.id === book.id
+                              ? applyShelfEntry(
+                                  { ...b, ...removeFromMyLibrary(b) },
+                                  entry,
+                                )
+                              : b,
+                          ),
+                        );
+                      })
+                      .catch(async (err) => {
+                        console.error(err);
+                        await reload().catch(console.error);
+                      });
                   },
                 },
               ];

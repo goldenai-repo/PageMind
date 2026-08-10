@@ -8,8 +8,8 @@ import type {
 } from "@/lib/books";
 import { getCurrentUser } from "@/lib/firebase/auth-server";
 import {
-  applyCatalogRatingDelta,
   booksCollection,
+  setCatalogUserRating,
   shelfEntryFromDoc,
   userBooksCollection,
   type UserBookDoc,
@@ -80,8 +80,6 @@ export async function PATCH(
 
   const now = new Date().toISOString();
   const ref = userBooksCollection(user.uid).doc(bookId);
-  const existing = await ref.get();
-  const prevRating = Number((existing.data() as UserBookDoc | undefined)?.rating ?? 0);
 
   const update: UserBookDoc = { updatedAt: now };
 
@@ -122,7 +120,7 @@ export async function PATCH(
 
   let catalogRating: { averageRating: number; ratingCount: number } | undefined;
   if (isBookRating(patch.rating)) {
-    catalogRating = await applyCatalogRatingDelta(bookId, prevRating, patch.rating);
+    catalogRating = await setCatalogUserRating(bookId, user.uid, patch.rating);
   }
 
   return NextResponse.json({
@@ -146,7 +144,8 @@ export async function DELETE(
   }
 
   const { bookId } = await params;
-  // Soft-remove from My Library — keep the doc so progress can remain if re-added.
+  // Soft-remove from My Books only. Keep rating (and progress) so re-adding
+  // restores the user's stars; Home average is unchanged.
   const ref = userBooksCollection(user.uid).doc(bookId);
   await ref.set(
     {

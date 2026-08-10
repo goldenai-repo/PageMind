@@ -180,12 +180,13 @@ export function normalizeLibraryBook(book: LibraryBook): LibraryBook {
   };
 }
 
-/** Remove from My Books only — catalog row stays on Home. */
+/** Remove from My Books only — keep rating/progress; catalog row stays on Home. */
 export function removeFromMyLibrary(book: LibraryBook): LibraryBook {
   return {
     ...book,
     inMyLibrary: false,
     favorite: false,
     status: undefined,
+    // rating intentionally preserved
   };
 }
