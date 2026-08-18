@@ -10,12 +10,14 @@ import {
   type ReadingProgressUpdate,
   type ShelfEntry,
 } from "./books";
+import { peekCover, rememberCover } from "./cover-cache";
 import { extractCoverImage, coverFromTitle } from "./cover";
 import { decodeText } from "./readers/decode-text";
 import {
   attachCachedCovers,
   deleteBookRecord,
   loadCachedBookBytes,
+  loadCachedCover,
   loadLegacyBooks,
   saveCachedBookBytes,
   saveCachedCover,
@@ -177,6 +179,50 @@ export async function coverImageForBook(
 }
 
 /**
+ * Resolve one book's cover (memory → IndexedDB → extract / title art).
+ * Used by the overlay so the open book isn't stuck behind the sequential queue.
+ */
+export async function ensureCover(
+  book: Pick<LibraryBook, "id" | "title" | "ext" | "data" | "coverImage">,
+): Promise<Blob | null> {
+  if (book.coverImage) {
+    rememberCover(book.id, book.coverImage);
+    return book.coverImage;
+  }
+  const memory = peekCover(book.id);
+  if (memory) return memory;
+  const cached = await loadCachedCover(book.id).catch(() => null);
+  if (cached) {
+    rememberCover(book.id, cached);
+    return cached;
+  }
+
+  try {
+    let coverImage: Blob | null = null;
+    if (book.ext === "txt") {
+      coverImage = await coverFromTitle(book.title, book.ext);
+    } else if (book.ext === "epub" || book.ext === "pdf") {
+      const withData = await loadBookData(book);
+      coverImage = await coverImageForBook(withData);
+    }
+    if (!coverImage) return null;
+    rememberCover(book.id, coverImage);
+    void saveCachedCover(book.id, coverImage).catch(console.error);
+    return coverImage;
+  } catch (err) {
+    console.error(`Cover extract failed for ${book.title}:`, err);
+    const fallback = await coverFromTitle(book.title, book.ext).catch(
+      () => null,
+    );
+    if (fallback) {
+      rememberCover(book.id, fallback);
+      void saveCachedCover(book.id, fallback).catch(console.error);
+    }
+    return fallback;
+  }
+}
+
+/**
  * Fill missing covers after the list paints.
  * EPUB/PDF: real cover (or title fallback). TXT: title art.
  * Results are cached so refresh shows the final cover immediately.
@@ -185,35 +231,23 @@ export async function enrichEpubPdfCovers(
   books: LibraryBook[],
   onCover: (bookId: string, coverImage: Blob) => void,
   signal?: { cancelled: boolean },
+  priorityId?: string | null,
 ): Promise<void> {
-  for (const book of books) {
-    if (signal?.cancelled) return;
-    if (book.coverImage) continue;
+  const ordered = priorityId
+    ? [...books].sort(
+        (a, b) => Number(b.id === priorityId) - Number(a.id === priorityId),
+      )
+    : books;
 
-    try {
-      let coverImage: Blob | null = null;
-      if (book.ext === "txt") {
-        coverImage = await coverFromTitle(book.title, book.ext);
-      } else if (book.ext === "epub" || book.ext === "pdf") {
-        const withData = await loadBookData(book);
-        if (signal?.cancelled) return;
-        coverImage = await coverImageForBook(withData);
-      }
-      if (!coverImage || signal?.cancelled) continue;
-      void saveCachedCover(book.id, coverImage).catch(console.error);
-      onCover(book.id, coverImage);
-    } catch (err) {
-      console.error(`Cover extract failed for ${book.title}:`, err);
-      if (book.ext === "epub" || book.ext === "pdf") {
-        const fallback = await coverFromTitle(book.title, book.ext).catch(
-          () => null,
-        );
-        if (fallback && !signal?.cancelled) {
-          void saveCachedCover(book.id, fallback).catch(console.error);
-          onCover(book.id, fallback);
-        }
-      }
+  for (const book of ordered) {
+    if (signal?.cancelled) return;
+    if (book.coverImage) {
+      rememberCover(book.id, book.coverImage);
+      continue;
     }
+    const cover = await ensureCover(book);
+    if (!cover || signal?.cancelled) continue;
+    onCover(book.id, cover);
   }
 }
 

@@ -12,6 +12,10 @@ type StarRatingProps = {
   onChange?: (rating: BookRating) => void;
   /** Show numeric average next to stars (Home). */
   showValue?: boolean;
+  /** When set with showValue, appends `(n)` after the average. */
+  count?: number;
+  /** Use light text (book detail overlay on navy). */
+  onDark?: boolean;
   className?: string;
   label?: string;
 };
@@ -47,6 +51,8 @@ export function StarRating({
   value,
   onChange,
   showValue = false,
+  count,
+  onDark = false,
   className,
   label = "Book rating",
 }: StarRatingProps) {
@@ -101,8 +107,14 @@ export function StarRating({
         })}
       </div>
       {showValue ? (
-        <span className="text-[0.72rem] font-semibold tabular-nums text-muted-foreground">
+        <span
+          className={cn(
+            "text-[0.72rem] font-semibold tabular-nums",
+            onDark ? "text-white/80" : "text-muted-foreground",
+          )}
+        >
           {display.toFixed(1)}
+          {typeof count === "number" && count > 0 ? ` (${count})` : ""}
         </span>
       ) : null}
     </div>

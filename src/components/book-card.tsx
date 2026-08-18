@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
 import { MoreHorizontal } from "lucide-react";
 
+import { BookCover } from "@/components/book-cover";
 import { StarRating } from "@/components/star-rating";
 import type { BookRating, LibraryBook } from "@/lib/books";
-import { coverFromTitle } from "@/lib/cover";
 import { cn } from "@/lib/utils";
 
 export type BookCardMenuItem = {
@@ -43,43 +42,12 @@ export function BookCard({
   menuItems,
   className,
 }: BookCardProps) {
-  const [titleCover, setTitleCover] = useState<Blob | null>(null);
-
-  // TXT (and only TXT) can show title art immediately — no embedded cover to wait for.
-  // EPUB/PDF keep a plain placeholder until the real cover (or fallback) arrives
-  // from the parent, so we don't flash title-art → book cover on every refresh.
-  useEffect(() => {
-    if (book.coverImage || book.ext !== "txt") return;
-    let cancelled = false;
-    void coverFromTitle(book.title, book.ext).then((blob) => {
-      if (!cancelled) setTitleCover(blob);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [book.coverImage, book.title, book.ext]);
-
-  const coverBlob = book.coverImage ?? titleCover;
-
-  const coverUrl = useMemo(() => {
-    if (!coverBlob) return null;
-    return URL.createObjectURL(coverBlob);
-  }, [coverBlob]);
-
-  useEffect(() => {
-    return () => {
-      if (coverUrl) URL.revokeObjectURL(coverUrl);
-    };
-  }, [coverUrl]);
-
   const percent = book.progressPercent ?? 0;
   const hasProgress = Boolean(book.lastOpenedAt) || percent > 0;
   const personalRating = (book.rating ?? 0) as BookRating;
   const averageRating = book.averageRating ?? 0;
   const ratingValue = onRate ? personalRating : averageRating;
   const hasMenu = Boolean(menuItems?.length);
-  const waitingForCover =
-    !coverUrl && (book.ext === "epub" || book.ext === "pdf");
 
   return (
     <div className={cn("relative flex flex-col", className)} role="listitem">
@@ -87,26 +55,10 @@ export function BookCard({
         type="button"
         onClick={onOpen}
         className="group relative w-full overflow-hidden rounded-sm shadow-[0_2px_10px_rgba(27,54,93,0.07)] outline-none transition-all hover:-translate-y-1.5 hover:shadow-[0_12px_30px_rgba(27,54,93,0.15)] focus-visible:ring-3 focus-visible:ring-navy/25"
-        style={{ aspectRatio: A4_ASPECT, background: book.cover }}
+        style={{ aspectRatio: A4_ASPECT }}
         aria-label={`${book.title} — ${book.ext.toUpperCase()}`}
       >
-        {coverUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element -- blob: URLs from canvas / file extract
-          <img
-            src={coverUrl}
-            alt=""
-            className="absolute inset-0 size-full object-cover"
-            draggable={false}
-          />
-        ) : (
-          <>
-            <div className="absolute inset-y-0 left-0 w-[10px] border-r border-white/10 bg-black/20" />
-            <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.14)_0%,transparent_55%)]" />
-            {waitingForCover ? (
-              <div className="absolute inset-0 animate-pulse bg-white/10" />
-            ) : null}
-          </>
-        )}
+        <BookCover book={book} className="absolute inset-0 size-full" />
 
         {book.favorite ? (
           <span className="absolute top-2 left-2.5 z-[1] rounded bg-black/35 px-1.5 py-0.5 text-[0.63rem] font-bold tracking-wider text-white/90 backdrop-blur-sm">
