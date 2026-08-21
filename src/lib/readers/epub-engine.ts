@@ -1,5 +1,6 @@
 import JSZip from "jszip";
 
+import { isolateCss } from "./css-scope";
 import { createFlowReader } from "./flow-reader";
 import type { ReaderMode } from "./reader-mode";
 import type {
@@ -8,8 +9,128 @@ import type {
   ReaderTocItem,
 } from "./types";
 
-type ManifestItem = { id: string; href: string; mt: string };
-type TocEntry = { label: string; href: string };
+type ManifestItem = { id: string; href: string; mt: string; properties: string };
+type TocEntry = { label: string; href: string; level: number };
+
+function dirname(path: string): string {
+  const i = path.replace(/\\/g, "/").lastIndexOf("/");
+  return i >= 0 ? path.slice(0, i) : "";
+}
+
+function joinPath(baseDir: string, rel: string): string {
+  const normalized = rel.replace(/\\/g, "/");
+  const hash = normalized.indexOf("#");
+  const pathPart = hash >= 0 ? normalized.slice(0, hash) : normalized;
+  const frag = hash >= 0 ? normalized.slice(hash + 1) : "";
+  const stacked = [
+    ...baseDir.split("/").filter((p) => p && p !== "."),
+    ...pathPart.split("/").filter((p) => p !== ""),
+  ];
+  const out: string[] = [];
+  for (const p of stacked) {
+    if (p === ".") continue;
+    if (p === "..") out.pop();
+    else out.push(p);
+  }
+  return out.join("/") + (frag ? `#${frag}` : "");
+}
+
+function decodeXml(text: string): string {
+  return text
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&#160;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) =>
+      String.fromCharCode(parseInt(n, 16)),
+    )
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function mergeChapterLabels(raw: TocEntry[]): TocEntry[] {
+  const out: TocEntry[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const cur = raw[i];
+    const next = raw[i + 1];
+    if (
+      next &&
+      CHAPTER_LABEL_RE.test(cur.label) &&
+      cur.href.split("#")[0] === next.href.split("#")[0]
+    ) {
+      out.push({
+        label: `${cur.label}: ${next.label}`,
+        href: cur.href,
+        level: cur.level,
+      });
+      i++;
+    } else {
+      out.push(cur);
+    }
+  }
+  return out;
+}
+
+function parseNcxToc(ncx: string, ncxDir: string): TocEntry[] {
+  const raw: TocEntry[] = [];
+  let depth = 0;
+  const tokenRe =
+    /<navPoint\b[^>]*>|<\/navPoint>|<navLabel>\s*<text>([^<]*)<\/text>[\s\S]*?<content\s+src="([^"]+)"/gi;
+  let m: RegExpExecArray | null;
+  while ((m = tokenRe.exec(ncx))) {
+    const token = m[0];
+    if (/^<navPoint\b/i.test(token)) {
+      depth++;
+      continue;
+    }
+    if (/^<\/navPoint>/i.test(token)) {
+      depth = Math.max(0, depth - 1);
+      continue;
+    }
+    const label = decodeXml(m[1] ?? "");
+    const href = joinPath(ncxDir, decodeXml(m[2] ?? ""));
+    if (label && href) {
+      raw.push({ label, href, level: Math.max(0, depth - 1) });
+    }
+  }
+  return mergeChapterLabels(raw);
+}
+
+function parseNavToc(html: string, navDir: string): TocEntry[] {
+  const navMatch =
+    html.match(/<nav\b[^>]*epub:type=["'][^"']*\btoc\b[^"']*["'][^>]*>([\s\S]*?)<\/nav>/i) ??
+    html.match(/<nav\b[^>]*>([\s\S]*?)<\/nav>/i);
+  if (!navMatch) return [];
+  const body = navMatch[1];
+  const raw: TocEntry[] = [];
+  let depth = 0;
+  const tokenRe =
+    /<(ol|ul)\b[^>]*>|<\/(ol|ul)>|<a\b([^>]*?)>([\s\S]*?)<\/a>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = tokenRe.exec(body))) {
+    const tag = (m[1] || m[2] || "").toLowerCase();
+    if (tag === "ol" || tag === "ul") {
+      if (m[0].startsWith("</")) depth = Math.max(0, depth - 1);
+      else depth++;
+      continue;
+    }
+    const attrs = m[3] ?? "";
+    const hrefRaw = (attrs.match(/\bhref="([^"]*)"/i) || [])[1] ?? "";
+    const label = decodeXml(m[4] ?? "");
+    if (!label || !hrefRaw || hrefRaw.startsWith("javascript:")) continue;
+    raw.push({
+      label,
+      href: joinPath(navDir, decodeXml(hrefRaw)),
+      level: Math.max(0, depth - 1),
+    });
+  }
+  return mergeChapterLabels(raw);
+}
 
 export type EpubNavState = ReaderNavState;
 export type EpubRendition = ReaderRendition;
@@ -63,19 +184,23 @@ export async function mountEpubReader(
   const opfMatch = containerXml.match(/full-path="([^"]+)"/);
   if (!opfMatch) throw new Error("Invalid EPUB: missing OPF path");
   const opfPath = opfMatch[1];
-  const opfDir =
-    opfPath.lastIndexOf("/") > 0
-      ? opfPath.slice(0, opfPath.lastIndexOf("/"))
-      : "";
-  const abs = (href: string) => (opfDir ? `${opfDir}/` : "") + href;
+  const opfDir = dirname(opfPath);
+  const abs = (href: string) => joinPath(opfDir, href).split("#")[0]!;
 
   const opfXml = await readZip(opfPath);
   const manifest: Record<string, ManifestItem> = {};
-  for (const m of opfXml.matchAll(/<item\b[^>]+?\/>/gs)) {
+  for (const m of opfXml.matchAll(/<item\b[^>]*>/g)) {
     const get = (k: string) =>
       (m[0].match(new RegExp(`\\b${k}="([^"]*)"`)) || [])[1] || "";
     const id = get("id");
-    if (id) manifest[id] = { id, href: get("href"), mt: get("media-type") };
+    if (id) {
+      manifest[id] = {
+        id,
+        href: get("href"),
+        mt: get("media-type"),
+        properties: get("properties"),
+      };
+    }
   }
 
   const spineIds = [...opfXml.matchAll(/<itemref[^>]+idref="([^"]+)"/g)].map(
@@ -116,38 +241,29 @@ export async function mountEpubReader(
     combinedCss += (await entry.async("string")) + "\n";
   }
 
-  const tocEntries: TocEntry[] = [];
-  const ncxItem = Object.values(manifest).find(
-    (i) => i.mt === "application/x-dtbncx+xml",
+  let tocEntries: TocEntry[] = [];
+  const navItem = Object.values(manifest).find((i) =>
+    i.properties.split(/\s+/).includes("nav"),
   );
-  if (ncxItem) {
+  if (navItem) {
     try {
-      const ncx = await readZip(abs(ncxItem.href));
-      const raw: TocEntry[] = [];
-      for (const m of ncx.matchAll(
-        /<navLabel>\s*<text>([^<]+)<\/text>[\s\S]*?<content\s+src="([^"]+)"/g,
-      )) {
-        raw.push({ label: m[1].trim(), href: m[2] });
-      }
-      for (let i = 0; i < raw.length; i++) {
-        const cur = raw[i];
-        const next = raw[i + 1];
-        if (
-          next &&
-          CHAPTER_LABEL_RE.test(cur.label) &&
-          cur.href.split("#")[0] === next.href.split("#")[0]
-        ) {
-          tocEntries.push({
-            label: `${cur.label}: ${next.label}`,
-            href: cur.href,
-          });
-          i++;
-        } else {
-          tocEntries.push(cur);
-        }
-      }
+      const navHtml = await readZip(abs(navItem.href));
+      tocEntries = parseNavToc(navHtml, dirname(abs(navItem.href)));
     } catch {
-      // ignore bad NCX
+      // ignore bad nav
+    }
+  }
+  if (tocEntries.length === 0) {
+    const ncxItem = Object.values(manifest).find(
+      (i) => i.mt === "application/x-dtbncx+xml",
+    );
+    if (ncxItem) {
+      try {
+        const ncx = await readZip(abs(ncxItem.href));
+        tocEntries = parseNcxToc(ncx, dirname(abs(ncxItem.href)));
+      } catch {
+        // ignore bad NCX
+      }
     }
   }
 
@@ -167,9 +283,11 @@ export async function mountEpubReader(
   ].join(";");
 
   // Typographic CSS injected ahead of every chapter's body, in every mode.
-  const contentCss = `
+  // Isolated to .pm-flow-epub so EPUB resets cannot restyle the app sidebar.
+  const contentCss = isolateCss(
+    `
     ${combinedCss}
-    body, p, div, span, li, td, th {
+    :scope, p, div, span, li, td, th {
       font-family: 'Lora', Georgia, 'Times New Roman', serif;
       line-height: 1.7;
     }
@@ -187,7 +305,9 @@ export async function mountEpubReader(
     pre, code { white-space:pre-wrap; font-family:monospace; line-height:1.5; }
     a    { color:#2E6DA4; }
     blockquote { border-left:3px solid #c5cdd8; margin:1em 0; padding-left:1em; color:#555; }
-  `;
+  `,
+    ".pm-flow-epub",
+  );
 
   async function loadChapterHtml(idx: number): Promise<string> {
     const item = spine[idx];
@@ -195,6 +315,11 @@ export async function mountEpubReader(
     const bm = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
     let body = bm ? bm[1] : html;
 
+    const inlineStyles: string[] = [];
+    body = body.replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gi, (_, css: string) => {
+      inlineStyles.push(css);
+      return "";
+    });
     body = body.replace(
       /<(link|meta|script)\b[^>]*\/?>(?:[\s\S]*?<\/\1>)?/gi,
       "",
@@ -215,7 +340,8 @@ export async function mountEpubReader(
       return blobUrl ? `${attr}="${blobUrl}"` : match;
     });
 
-    return body;
+    if (inlineStyles.length === 0) return body;
+    return `<style>${isolateCss(inlineStyles.join("\n"), ".pm-flow-epub")}</style>${body}`;
   }
 
   // Resolve each TOC entry to a spine section (+ optional fragment) up front so
@@ -225,28 +351,36 @@ export async function mountEpubReader(
     label: string;
     sectionIdx: number;
     fragment?: string;
+    level: number;
   };
   const resolvedToc: ResolvedToc[] = [];
   tocEntries.forEach((entry, i) => {
     const [fileHref, frag] = entry.href.split("#");
-    const spineItem = spine.find(
-      (s) =>
-        s.href === fileHref ||
-        s.href.endsWith(fileHref) ||
-        fileHref.endsWith(s.href),
-    );
-    if (!spineItem) return;
+    const file = (fileHref ?? "").replace(/\\/g, "/");
+    const spineIdx = spine.findIndex((s) => {
+      const sh = joinPath(opfDir, s.href).replace(/\\/g, "/");
+      const fh = file;
+      return (
+        sh === fh ||
+        sh.endsWith("/" + fh) ||
+        fh.endsWith("/" + sh) ||
+        sh.split("/").pop() === fh.split("/").pop()
+      );
+    });
+    if (spineIdx < 0) return;
     resolvedToc.push({
       id: `toc-${i}`,
       label: entry.label,
-      sectionIdx: spine.indexOf(spineItem),
+      sectionIdx: spineIdx,
       fragment: frag || undefined,
+      level: entry.level,
     });
   });
 
-  const toc: ReaderTocItem[] = resolvedToc.map(({ id, label }) => ({
+  const toc: ReaderTocItem[] = resolvedToc.map(({ id, label, level }) => ({
     id,
     label,
+    level,
   }));
 
   const reader = createFlowReader({

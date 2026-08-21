@@ -83,6 +83,9 @@ export type LibraryBook = BookMeta & {
   favorite?: boolean;
   /** Personal rating; 0 = unrated (My Library only) */
   rating?: BookRating;
+  /** Saved from Rate and Review; not shown in the UI yet. */
+  reviewTitle?: string;
+  reviewBody?: string;
   /** 1-based last page (PDF) or page-in-section (reflowable) */
   lastReadPage?: number;
   totalPages?: number | null;
@@ -109,6 +112,9 @@ export type ShelfEntry = {
   favorite?: boolean;
   status?: BookStatus | null;
   rating?: BookRating;
+  /** Saved from Rate and Review; not shown in the UI yet. */
+  reviewTitle?: string;
+  reviewBody?: string;
   lastReadPage?: number;
   totalPages?: number | null;
   progressPercent?: number;
@@ -172,6 +178,8 @@ export function normalizeLibraryBook(book: LibraryBook): LibraryBook {
   return {
     ...book,
     rating: (book.rating ?? 0) as BookRating,
+    reviewTitle: book.reviewTitle ?? "",
+    reviewBody: book.reviewBody ?? "",
     lastReadPage: book.lastReadPage ?? 0,
     totalPages: book.totalPages ?? null,
     progressPercent: book.progressPercent ?? 0,
@@ -187,6 +195,6 @@ export function removeFromMyLibrary(book: LibraryBook): LibraryBook {
     inMyLibrary: false,
     favorite: false,
     status: undefined,
-    // rating intentionally preserved
+    // rating and review are intentionally preserved
   };
 }

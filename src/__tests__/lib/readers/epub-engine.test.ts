@@ -264,6 +264,82 @@ describe("mountEpubReader", () => {
     expect(onToc).toHaveBeenCalledWith([]);
   });
 
+  it("reads an EPUB3 nav document and indents nested entries", async () => {
+    mockZip.files = {
+      ...BASE_EPUB,
+      "content.opf": `<?xml version="1.0"?><package>
+        <manifest>
+          <item id="ch1" href="ch1.xhtml" media-type="application/xhtml+xml"/>
+          <item id="ch2" href="ch2.xhtml" media-type="application/xhtml+xml"/>
+          <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+        </manifest>
+        <spine>
+          <itemref idref="ch1"/>
+          <itemref idref="ch2"/>
+        </spine>
+      </package>`,
+      "nav.xhtml": `<html><body>
+        <nav epub:type="toc">
+          <ol>
+            <li><a href="ch1.xhtml">One</a></li>
+            <li><a href="ch2.xhtml">Two</a>
+              <ol><li><a href="ch2.xhtml#s">Two-a</a></li></ol>
+            </li>
+          </ol>
+        </nav>
+      </body></html>`,
+    };
+
+    const onToc = vi.fn();
+    await mountEpubReader({
+      file: makeFile(),
+      contentEl,
+      fontSize: 18,
+      onToc,
+    });
+
+    const items = onToc.mock.calls.at(-1)?.[0] as {
+      label: string;
+      level?: number;
+    }[];
+    expect(items.map((i) => [i.label, i.level ?? 0])).toEqual([
+      ["One", 0],
+      ["Two", 0],
+      ["Two-a", 1],
+    ]);
+  });
+
+  it("resolves NCX hrefs relative to the NCX file", async () => {
+    mockZip.files = {
+      "META-INF/container.xml":
+        '<?xml version="1.0"?><container><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>',
+      "OEBPS/content.opf": `<?xml version="1.0"?><package>
+        <manifest>
+          <item id="ch1" href="ch1.xhtml" media-type="application/xhtml+xml"/>
+          <item id="ncx" href="toc/toc.ncx" media-type="application/x-dtbncx+xml"/>
+        </manifest>
+        <spine><itemref idref="ch1"/></spine>
+      </package>`,
+      "OEBPS/ch1.xhtml":
+        "<html><body><h1>Chapter One</h1><p>Hello.</p></body></html>",
+      "OEBPS/toc/toc.ncx": `<?xml version="1.0"?><ncx><navMap>
+        <navPoint><navLabel><text>Chapter One</text></navLabel><content src="../ch1.xhtml"/></navPoint>
+      </navMap></ncx>`,
+    };
+
+    const onToc = vi.fn();
+    await mountEpubReader({
+      file: makeFile(),
+      contentEl,
+      fontSize: 18,
+      onToc,
+    });
+
+    const items = onToc.mock.calls.at(-1)?.[0] as { label: string }[];
+    expect(items).toHaveLength(1);
+    expect(items[0].label).toBe("Chapter One");
+  });
+
   it("throws when the ZIP cannot be parsed", async () => {
     vi.mocked(JSZip.loadAsync).mockRejectedValueOnce(
       new Error("not a zip file"),

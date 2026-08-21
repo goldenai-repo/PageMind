@@ -200,14 +200,15 @@
   background: transparent;
   border-radius: 8px;
   font-size: 0.84rem;
-  line-height: 1.35;
+  line-height: 1.4;
   color: #444c5a;
   text-align: left;
   text-decoration: none;
   cursor: pointer;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .toc-list .toc-link:hover {
   background: #e8eef5;

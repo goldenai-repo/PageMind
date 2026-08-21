@@ -255,6 +255,56 @@ export function UploadSection({ userId }: { userId: string }) {
     },
   };
 
+  if (currentBook) {
+    return (
+      <BookReader
+        book={currentBook}
+        userId={userId}
+        onClose={() => setCurrentBook(null)}
+        onProgress={(progress) => {
+          setBooks((prev) =>
+            prev.map((b) =>
+              b.id === currentBook.id
+                ? {
+                    ...b,
+                    inMyLibrary: true,
+                    lastReadPage: progress.lastReadPage,
+                    totalPages: progress.totalPages,
+                    progressPercent: progress.progressPercent,
+                    locator: progress.locator,
+                    lastOpenedAt: new Date(),
+                    ...(progress.progressPercent >= 100
+                      ? { status: "finished" as const }
+                      : {}),
+                  }
+                : b,
+            ),
+          );
+          setCurrentBook((current) =>
+            current
+              ? {
+                  ...current,
+                  lastReadPage: progress.lastReadPage,
+                  totalPages: progress.totalPages,
+                  progressPercent: progress.progressPercent,
+                  locator: progress.locator,
+                }
+              : current,
+          );
+          void updateShelfEntry(currentBook.id, { progress })
+            .then((entry) => {
+              setBooks((prev) =>
+                prev.map((b) =>
+                  b.id === currentBook.id ? applyShelfEntry(b, entry) : b,
+                ),
+              );
+            })
+            .catch(console.error);
+        }}
+      />
+    );
+  }
+
   return (
     <>
       <div
@@ -421,54 +471,6 @@ export function UploadSection({ userId }: { userId: string }) {
           ))}
         </div>
       )}
-
-      {currentBook ? (
-        <BookReader
-          book={currentBook}
-          userId={userId}
-          onClose={() => setCurrentBook(null)}
-          onProgress={(progress) => {
-            setBooks((prev) =>
-              prev.map((b) =>
-                b.id === currentBook.id
-                  ? {
-                      ...b,
-                      inMyLibrary: true,
-                      lastReadPage: progress.lastReadPage,
-                      totalPages: progress.totalPages,
-                      progressPercent: progress.progressPercent,
-                      locator: progress.locator,
-                      lastOpenedAt: new Date(),
-                      ...(progress.progressPercent >= 100
-                        ? { status: "finished" as const }
-                        : {}),
-                    }
-                  : b,
-              ),
-            );
-            setCurrentBook((current) =>
-              current
-                ? {
-                    ...current,
-                    lastReadPage: progress.lastReadPage,
-                    totalPages: progress.totalPages,
-                    progressPercent: progress.progressPercent,
-                    locator: progress.locator,
-                  }
-                : current,
-            );
-            void updateShelfEntry(currentBook.id, { progress })
-              .then((entry) => {
-                setBooks((prev) =>
-                  prev.map((b) =>
-                    b.id === currentBook.id ? applyShelfEntry(b, entry) : b,
-                  ),
-                );
-              })
-              .catch(console.error);
-          }}
-        />
-      ) : null}
     </>
   );
 }

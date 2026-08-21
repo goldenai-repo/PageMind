@@ -1,17 +1,29 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import {
   BookOpen,
   ChevronLeft,
   Columns2,
   Lightbulb,
-  PanelLeft,
   ScrollText,
-  X,
 } from "lucide-react";
 
+import { ReaderNotesSidebar } from "@/components/reader-notes-sidebar";
+import { useOptionalReaderToc } from "@/components/reader-toc-context";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import {
+  SidebarProvider,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
 import type { LibraryBook, ReadingProgressUpdate } from "@/lib/books";
 import { fetchTipsForBook, fetchUserPrefs, saveUserPrefs } from "@/lib/library-api";
 import { mountEpubReader } from "@/lib/readers/epub-engine";
@@ -30,7 +42,7 @@ import type {
   ReaderRendition,
   ReaderTocItem,
 } from "@/lib/readers/types";
-import { TIP_TYPES, type TipCard } from "@/lib/tips";
+import type { TipCard } from "@/lib/tips";
 import { cn } from "@/lib/utils";
 
 const READER_MODE_OPTIONS: {
@@ -65,9 +77,17 @@ export function BookReader({ book, onClose, userId, onProgress }: BookReaderProp
   const [fontSize, setFontSize] = useState(18);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [tocOpen, setTocOpen] = useState(false);
   const [toc, setToc] = useState<ReaderTocItem[]>([]);
   const [activeTocId, setActiveTocId] = useState<string | null>(null);
+  const setTocSession = useOptionalReaderToc()?.setSession;
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const closeReader = useCallback(() => {
+    onCloseRef.current();
+  }, []);
+  const goToToc = useCallback((id: string) => {
+    void renditionRef.current?.goToTocItem?.(id);
+  }, []);
   // Persisted reader mode via an external store: SSR-safe (no hydration
   // mismatch) and no setState-in-effect.
   const mode = useSyncExternalStore(
@@ -241,7 +261,6 @@ export function BookReader({ book, onClose, userId, onProgress }: BookReaderProp
     setError(null);
     setToc([]);
     setActiveTocId(null);
-    setTocOpen(false);
     setFontSize(18);
     setNav({ canPrev: false, canNext: false, pageLabel: "" });
     content.innerHTML = "";
@@ -250,7 +269,6 @@ export function BookReader({ book, onClose, userId, onProgress }: BookReaderProp
     const handleToc = (items: ReaderTocItem[]) => {
       if (abort.signal.aborted) return;
       setToc(items);
-      setTocOpen(items.length > 0);
     };
     const handleTocActive = (id: string | null) => {
       if (abort.signal.aborted) return;
@@ -356,6 +374,18 @@ export function BookReader({ book, onClose, userId, onProgress }: BookReaderProp
     renditionRef.current?.themes.fontSize(`${fontSize}px`);
   }, [fontSize, book.ext]);
 
+  // Drive the shared library sidebar (same shadcn Sidebar as /library).
+  useLayoutEffect(() => {
+    if (!setTocSession) return;
+    setTocSession({
+      items: toc,
+      activeId: activeTocId,
+      onSelect: goToToc,
+      onClose: closeReader,
+    });
+    return () => setTocSession(null);
+  }, [toc, activeTocId, goToToc, closeReader, setTocSession]);
+
   // Keep the active sidebar entry in view as the reader moves.
   useEffect(() => {
     if (!activeTocId) return;
@@ -375,17 +405,23 @@ export function BookReader({ book, onClose, userId, onProgress }: BookReaderProp
     void saveUserPrefs({ readerMode: next }).catch(console.error);
   };
 
-  const hasToc = toc.length > 0;
-
   return (
     <div
-      className="fixed inset-0 z-[1000] flex flex-col bg-[#eef0f4]"
+      className="flex h-full min-h-0 flex-1 flex-col bg-[#eef0f4]"
       role="dialog"
       aria-modal="true"
       aria-label="Book reader"
     >
-      <header className="flex h-[60px] shrink-0 items-center justify-between gap-4 border-b border-border bg-white px-4 shadow-[0_1px_6px_rgba(0,0,0,0.06)] sm:px-7">
+      <header className="relative z-20 flex h-16 shrink-0 items-center justify-between gap-4 border-b border-border bg-white px-4 sm:px-7">
         <div className="flex shrink-0 items-center gap-1">
+          <SidebarTrigger
+            title="Toggle contents"
+            className="-ml-1 text-navy hover:bg-navy/5 hover:text-navy"
+          />
+          <Separator
+            orientation="vertical"
+            className="mx-1 data-vertical:h-4 data-vertical:self-auto"
+          />
           <Button
             type="button"
             variant="ghost"
@@ -408,7 +444,8 @@ export function BookReader({ book, onClose, userId, onProgress }: BookReaderProp
             type="button"
             variant="outline"
             size="icon-sm"
-            title="Smart notes"
+            title="Toggle smart notes"
+            aria-label="Toggle smart notes"
             aria-pressed={notesOpen}
             onClick={() => setNotesOpen((v) => !v)}
             className={cn(
@@ -477,70 +514,7 @@ export function BookReader({ book, onClose, userId, onProgress }: BookReaderProp
       </header>
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <aside
-          className={cn(
-            "flex shrink-0 flex-col overflow-hidden border-r border-border bg-[#f5f7fb] transition-[width] duration-200",
-            tocOpen && hasToc ? "w-[272px]" : "w-0 border-r-0",
-          )}
-          aria-label="Table of contents"
-        >
-          <div className="flex shrink-0 items-center gap-1 border-b border-border bg-white px-2 py-2.5 text-[0.72rem] font-bold tracking-wider text-navy uppercase">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              title="Hide contents"
-              aria-label="Hide contents"
-              aria-pressed={tocOpen}
-              onClick={() => setTocOpen(false)}
-              className="rounded-md text-navy hover:bg-navy/5 hover:text-navy"
-            >
-              <PanelLeft className="size-4" />
-            </Button>
-            <span>Contents</span>
-          </div>
-          <ul className="toc-list m-0 flex-1 list-none overflow-y-auto p-2" role="tree">
-            {toc.map((item) => (
-              <li key={item.id} className="toc-item" role="none">
-                <button
-                  type="button"
-                  role="treeitem"
-                  aria-selected={activeTocId === item.id}
-                  data-toc-id={item.id}
-                  title={item.label}
-                  onClick={() => void renditionRef.current?.goToTocItem?.(item.id)}
-                  className={cn(
-                    "toc-link",
-                    activeTocId === item.id && "active",
-                  )}
-                  style={
-                    activeTocId === item.id
-                      ? { background: "#1B365D", color: "#fff" }
-                      : undefined
-                  }
-                >
-                  {item.label}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </aside>
-
         <div className="relative flex min-w-0 flex-1 flex-col">
-          {hasToc && !tocOpen ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="icon-sm"
-              title="Show contents"
-              aria-label="Show contents"
-              aria-pressed={tocOpen}
-              onClick={() => setTocOpen(true)}
-              className="absolute left-2 top-2 z-10 rounded-md border-border bg-white text-navy shadow-sm hover:bg-navy/5 hover:text-navy"
-            >
-              <PanelLeft className="size-4" />
-            </Button>
-          ) : null}
           <div
             ref={contentRef}
             className={cn(
@@ -599,88 +573,19 @@ export function BookReader({ book, onClose, userId, onProgress }: BookReaderProp
             </Button>
           </div>
         </div>
-
-        <aside
-          className={cn(
-            "flex shrink-0 flex-col overflow-hidden border-l border-border bg-[#f5f7fb] transition-[width] duration-200",
-            notesOpen ? "w-[320px]" : "w-0 border-l-0",
-          )}
-          aria-label="Smart notes"
+        <SidebarProvider
+          open={notesOpen}
+          onOpenChange={setNotesOpen}
+          persist={false}
+          enableShortcut={false}
+          className="h-full min-h-0! w-auto"
         >
-          <div className="flex shrink-0 items-center justify-between border-b border-border bg-white px-3 py-3 text-[0.72rem] font-bold tracking-wider text-navy uppercase">
-            <span className="px-1">Smart Notes</span>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-xs"
-              aria-label="Close smart notes"
-              onClick={() => setNotesOpen(false)}
-              className="text-muted-foreground"
-            >
-              <X className="size-3.5" />
-            </Button>
-          </div>
-
-          <div className="flex-1 space-y-3 overflow-y-auto p-3">
-            {tipsLoading ? (
-              <p className="px-1 pt-6 text-center text-[0.8rem] text-muted-foreground">
-                Loading…
-              </p>
-            ) : tips.length === 0 ? (
-              <p className="px-1 pt-6 text-center text-[0.8rem] leading-relaxed text-muted-foreground">
-                No smart notes for this book yet.
-              </p>
-            ) : visibleTips.length === 0 ? (
-              <p className="px-1 pt-6 text-center text-[0.8rem] leading-relaxed text-muted-foreground">
-                No smart notes on this page. Keep reading — they appear beside
-                the passages they annotate.
-              </p>
-            ) : null}
-            {visibleTips.map((tip) => {
-              const meta = TIP_TYPES[tip.type];
-              return (
-                <div
-                  key={tip.id}
-                  className="rounded-lg border border-border bg-white p-3 shadow-[0_2px_10px_rgba(27,54,93,0.06)]"
-                  style={{ borderLeft: `4px solid ${meta.color}` }}
-                >
-                  <span
-                    className="text-[0.62rem] font-bold tracking-wider uppercase"
-                    style={{ color: meta.color }}
-                  >
-                    {meta.icon} {meta.label}
-                  </span>
-                  <p className="mt-1 text-[0.9rem] leading-snug font-semibold text-foreground">
-                    {tip.title}
-                  </p>
-                  <p className="mt-1 text-[0.82rem] leading-relaxed text-[#55617a]">
-                    {tip.body}
-                  </p>
-                  {tip.anchor.text ? (
-                    <p className="mt-2 border-l-2 border-border pl-2 text-[0.74rem] text-muted-foreground italic">
-                      “{tip.anchor.text}”
-                    </p>
-                  ) : null}
-                  {tip.references && tip.references.length > 0 ? (
-                    <div className="mt-2 flex flex-col gap-1">
-                      {tip.references.map((ref, i) => (
-                        <a
-                          key={i}
-                          href={ref.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="truncate text-[0.76rem] font-medium text-navy hover:underline"
-                        >
-                          📎 {ref.label}
-                        </a>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-        </aside>
+          <ReaderNotesSidebar
+            tips={tips}
+            visibleTips={visibleTips}
+            loading={tipsLoading}
+          />
+        </SidebarProvider>
       </div>
     </div>
   );

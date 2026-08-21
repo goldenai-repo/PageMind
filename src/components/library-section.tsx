@@ -7,11 +7,11 @@ import { BookOpen } from "lucide-react";
 import { BookCard, type BookCardMenuItem } from "@/components/book-card";
 import { BookDetailOverlay } from "@/components/book-detail-overlay";
 import { BookReader } from "@/components/book-reader";
+import { RateReviewDialog } from "@/components/rate-review-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   isInMyLibrary,
   removeFromMyLibrary,
-  type BookRating,
   type BookStatus,
   type LibraryBook,
   type LibraryShelf,
@@ -64,6 +64,7 @@ export function LibrarySection({
   const [currentBook, setCurrentBook] = useState<LibraryBook | null>(null);
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const [reviewBook, setReviewBook] = useState<LibraryBook | null>(null);
   const priorityCoverIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -300,16 +301,45 @@ export function LibrarySection({
         />
       ) : null}
 
-      {currentBook ? (
+      <RateReviewDialog
+        book={
+          reviewBook
+            ? (books.find((b) => b.id === reviewBook.id) ?? reviewBook)
+            : null
+        }
+        open={Boolean(reviewBook)}
+        onOpenChange={(open) => {
+          if (!open) setReviewBook(null);
+        }}
+        onSave={(payload) => {
+          if (!reviewBook) return;
+          void patchBook(reviewBook, payload, payload);
+        }}
+        onDelete={() => {
+          if (!reviewBook) return;
+          void patchBook(
+            reviewBook,
+            { rating: 0, reviewTitle: "", reviewBody: "" },
+            { rating: 0, reviewTitle: "", reviewBody: "" },
+          );
+        }}
+      />
+    </>
+  );
+
+  if (currentBook) {
+    return (
+      <>
         <BookReader
           book={currentBook}
           userId={userId}
           onClose={() => setCurrentBook(null)}
           onProgress={onProgress}
         />
-      ) : null}
-    </>
-  );
+        {overlays}
+      </>
+    );
+  }
 
   if (loading) {
     return (
@@ -406,6 +436,13 @@ export function LibrarySection({
               ]
             : [
                 {
+                  label: "Rate and Review",
+                  onSelect: () => {
+                    setMenuOpenId(null);
+                    setReviewBook(book);
+                  },
+                },
+                {
                   label: book.favorite
                     ? "Remove Favorite"
                     : "Add to Favorite",
@@ -471,13 +508,7 @@ export function LibrarySection({
                 isHome ? openDetail(book) : void openBook(book)
               }
               showProgress={!isHome}
-              showRating={!isHome}
-              onRate={
-                isHome
-                  ? undefined
-                  : (rating: BookRating) =>
-                      void patchBook(book, { rating }, { rating })
-              }
+              showRating={false}
               menuOpen={menuOpenId === book.id}
               onMenuOpenChange={(open) =>
                 setMenuOpenId(open ? book.id : null)

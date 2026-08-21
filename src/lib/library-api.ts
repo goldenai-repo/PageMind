@@ -74,6 +74,8 @@ export type UserBookPatch = {
   favorite?: boolean;
   status?: BookStatus | null;
   rating?: BookRating;
+  reviewTitle?: string;
+  reviewBody?: string;
   progress?: ReadingProgressUpdate;
   lastOpenedAt?: string | null;
 };
@@ -128,6 +130,8 @@ export function mergeMetaWithShelf(
     favorite: entry?.favorite,
     status: entry?.status ?? undefined,
     rating: entry?.rating,
+    reviewTitle: entry?.reviewTitle,
+    reviewBody: entry?.reviewBody,
     lastReadPage: entry?.lastReadPage,
     totalPages: entry?.totalPages,
     progressPercent: entry?.progressPercent,
@@ -296,6 +300,8 @@ export function applyShelfEntry(
     status: entry.status ?? undefined,
     // Always take server personal rating (including 0 = cleared by user).
     rating: (entry.rating ?? 0) as BookRating,
+    reviewTitle: entry.reviewTitle ?? book.reviewTitle ?? "",
+    reviewBody: entry.reviewBody ?? book.reviewBody ?? "",
     lastReadPage: entry.lastReadPage ?? book.lastReadPage,
     totalPages: entry.totalPages ?? book.totalPages,
     progressPercent: entry.progressPercent ?? book.progressPercent,

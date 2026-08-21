@@ -7,10 +7,13 @@ vi.mock("pdfjs-dist", () => ({
   getDocument: vi.fn(),
 }));
 
-function mockDoc(numPages: number) {
+function mockDoc(numPages: number, outline: unknown = null) {
   const doc = {
     numPages,
     destroy: vi.fn(),
+    getOutline: vi.fn().mockResolvedValue(outline),
+    getDestination: vi.fn(),
+    getPageIndex: vi.fn(),
     getPage: vi.fn().mockImplementation(async () => ({
       getViewport: vi.fn().mockReturnValue({ width: 800, height: 1000 }),
       render: vi.fn().mockReturnValue({ promise: Promise.resolve() }),
@@ -121,5 +124,42 @@ describe("mountPdfReader", () => {
     rendition.destroy();
 
     expect(doc.destroy).toHaveBeenCalled();
+  });
+
+  it("emits outline chapter names instead of page numbers", async () => {
+    const dest = [{ num: 2, gen: 0 }];
+    const doc = mockDoc(8, [
+      { title: "  Chapter One  ", dest: "ch1", items: [] },
+      { title: "Chapter Two", dest, items: [] },
+      { title: "Chapter Three", dest: [4], items: [] },
+    ]);
+    doc.getDestination.mockResolvedValue([{ num: 0, gen: 0 }]);
+    doc.getPageIndex.mockImplementation(async (ref: { num: number }) => ref.num);
+
+    const onToc = vi.fn();
+    const contentEl = document.createElement("div");
+    await mountPdfReader({
+      data: new ArrayBuffer(0),
+      contentEl,
+      onToc,
+    });
+
+    expect(onToc).toHaveBeenCalledWith([
+      { id: "ch-0", label: "Chapter One", level: 0 },
+      { id: "ch-1", label: "Chapter Two", level: 0 },
+      { id: "ch-2", label: "Chapter Three", level: 0 },
+    ]);
+  });
+
+  it("emits an empty catalog when the PDF has no outline", async () => {
+    const onToc = vi.fn();
+    const contentEl = document.createElement("div");
+    await mountPdfReader({
+      data: new ArrayBuffer(0),
+      contentEl,
+      onToc,
+    });
+
+    expect(onToc).toHaveBeenCalledWith([]);
   });
 });

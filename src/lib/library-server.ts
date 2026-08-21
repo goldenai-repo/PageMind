@@ -51,6 +51,8 @@ export type UserBookDoc = {
   favorite?: boolean;
   status?: BookStatus | null;
   rating?: number;
+  reviewTitle?: string;
+  reviewBody?: string;
   lastReadPage?: number;
   totalPages?: number | null;
   progressPercent?: number;
@@ -304,6 +306,8 @@ export function shelfEntryFromDoc(doc: DocumentSnapshot): ShelfEntry {
     favorite: data.favorite === true,
     status: data.status === "want" || data.status === "finished" ? data.status : null,
     rating: asRating(data.rating),
+    reviewTitle: typeof data.reviewTitle === "string" ? data.reviewTitle : "",
+    reviewBody: typeof data.reviewBody === "string" ? data.reviewBody : "",
     lastReadPage: data.lastReadPage ?? 0,
     totalPages: data.totalPages ?? null,
     progressPercent: data.progressPercent ?? 0,
