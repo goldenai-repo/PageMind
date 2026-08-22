@@ -12,16 +12,27 @@ type StarRatingProps = {
   onChange?: (rating: BookRating) => void;
   /** Show numeric average next to stars (Home). */
   showValue?: boolean;
+  /** When set with showValue, appends `(n)` after the average. */
+  count?: number;
+  /** Use light text (book detail overlay on navy). */
+  onDark?: boolean;
+  /** `lg` for the Rate and Review dialog. */
+  size?: "sm" | "lg";
   className?: string;
   label?: string;
 };
 
-function StarGlyph({ fill }: { fill: number }) {
+function StarGlyph({ fill, size }: { fill: number; size: "sm" | "lg" }) {
   const portion = Math.max(0, Math.min(1, fill));
+  const box = size === "lg" ? "size-7" : "size-3.5";
   return (
-    <span className="relative inline-flex size-3.5 shrink-0">
+    <span className={cn("relative inline-flex shrink-0", box)}>
       <Star
-        className="absolute inset-0 size-3.5 text-amber-500 fill-transparent opacity-40"
+        className={cn(
+          "absolute inset-0 text-amber-500 fill-transparent",
+          box,
+          size === "lg" ? "opacity-50" : "opacity-40",
+        )}
         aria-hidden
       />
       {portion > 0 ? (
@@ -30,7 +41,7 @@ function StarGlyph({ fill }: { fill: number }) {
           style={{ width: `${portion * 100}%` }}
         >
           <Star
-            className="size-3.5 text-amber-500 fill-current"
+            className={cn("text-amber-500 fill-current", box)}
             aria-hidden
           />
         </span>
@@ -47,6 +58,9 @@ export function StarRating({
   value,
   onChange,
   showValue = false,
+  count,
+  onDark = false,
+  size = "sm",
   className,
   label = "Book rating",
 }: StarRatingProps) {
@@ -67,7 +81,7 @@ export function StarRating({
       onClick={(e) => e.stopPropagation()}
       onKeyDown={(e) => e.stopPropagation()}
     >
-      <div className="flex items-center gap-0.5">
+      <div className={cn("flex items-center", size === "lg" ? "gap-1" : "gap-0.5")}>
         {([1, 2, 3, 4, 5] as const).map((n) => {
           const fill = Math.max(0, Math.min(1, display - (n - 1)));
           const pressed = interactive && Math.round(clamped) >= n;
@@ -75,7 +89,7 @@ export function StarRating({
           if (!interactive) {
             return (
               <span key={n}>
-                <StarGlyph fill={fill} />
+                <StarGlyph fill={fill} size={size} />
               </span>
             );
           }
@@ -95,14 +109,20 @@ export function StarRating({
                 onChange?.(Math.round(clamped) === n ? 0 : n)
               }
             >
-              <StarGlyph fill={fill} />
+              <StarGlyph fill={fill} size={size} />
             </button>
           );
         })}
       </div>
       {showValue ? (
-        <span className="text-[0.72rem] font-semibold tabular-nums text-muted-foreground">
+        <span
+          className={cn(
+            "text-[0.72rem] font-semibold tabular-nums",
+            onDark ? "text-white/80" : "text-muted-foreground",
+          )}
+        >
           {display.toFixed(1)}
+          {typeof count === "number" && count > 0 ? ` (${count})` : ""}
         </span>
       ) : null}
     </div>

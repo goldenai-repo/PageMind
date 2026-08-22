@@ -104,7 +104,7 @@ describe("mountTxtReader", () => {
     );
   });
 
-  it("does not invent a Contents sidebar for TXT", () => {
+  it("always emits a Contents sidebar, using Start when there are no headings", () => {
     const onToc = vi.fn();
     mountTxtReader({
       text: "a".repeat(500) + "\n\n" + "b".repeat(500),
@@ -113,7 +113,24 @@ describe("mountTxtReader", () => {
       onToc,
       sectionSize: 200,
     });
-    expect(onToc).toHaveBeenCalledWith([]);
+    expect(onToc).toHaveBeenCalledWith([
+      expect.objectContaining({ id: "start", label: "Start" }),
+    ]);
+  });
+
+  it("emits a Contents sidebar for real Chapter headings", () => {
+    const onToc = vi.fn();
+    mountTxtReader({
+      text: "Chapter 1 Dawn\nhello\n\nChapter 2 Dusk\nbye\n",
+      contentEl: document.createElement("div"),
+      fontSize: 18,
+      onToc,
+    });
+    const items = onToc.mock.calls.at(-1)?.[0] as { label: string }[];
+    expect(items).toEqual([
+      expect.objectContaining({ id: "ch-0", label: "Chapter 1 Dawn" }),
+      expect.objectContaining({ id: "ch-1", label: "Chapter 2 Dusk" }),
+    ]);
   });
 
   it("destroy() is safe to call", () => {

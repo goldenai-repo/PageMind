@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { extractBookAuthor } from "@/lib/book-metadata";
 import { COVERS, formatSize, isBookExt } from "@/lib/books";
 import { getCurrentUser } from "@/lib/firebase/auth-server";
 import {
@@ -64,6 +65,7 @@ export async function POST(request: Request) {
   const { storagePath } = await saveBookFile(id, bytes, ext);
 
   const count = (await booksCollection().count().get()).data().count;
+  const author = await extractBookAuthor(ext, bytes);
   const doc: BookDoc = {
     title: file.name.replace(/\.[^/.]+$/, ""),
     ext,
@@ -75,6 +77,7 @@ export async function POST(request: Request) {
     storagePath,
     ratingSum: 0,
     ratingCount: 0,
+    ...(author ? { author } : {}),
   };
   await booksCollection().doc(id).set(doc);
 

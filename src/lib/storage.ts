@@ -5,6 +5,7 @@ import {
   type LibraryBook,
   type ReadingProgressUpdate,
 } from "./books";
+import { rememberCover } from "./cover-cache";
 
 /**
  * Shared IndexedDB (`pagemind`) caches downloaded shared-library bytes, tips,
@@ -178,10 +179,12 @@ export async function attachCachedCovers(
   const out: LibraryBook[] = [];
   for (const book of books) {
     if (book.coverImage) {
+      rememberCover(book.id, book.coverImage);
       out.push(book);
       continue;
     }
     const cached = await loadCachedCover(book.id).catch(() => null);
+    if (cached) rememberCover(book.id, cached);
     out.push(cached ? { ...book, coverImage: cached } : book);
   }
   return out;

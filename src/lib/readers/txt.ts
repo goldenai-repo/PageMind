@@ -1,8 +1,10 @@
 import { createFlowReader } from "./flow-reader";
 import type { ReaderMode } from "./reader-mode";
+import { detectTxtChapters } from "./txt-chapters";
 import type {
   ReaderNavState,
   ReaderRendition,
+  ReaderTocItem,
 } from "./types";
 
 export type TxtMountOptions = {
@@ -55,6 +57,64 @@ function escapeHtml(text: string): string {
     .replace(/>/g, "&gt;");
 }
 
+type ResolvedTxtToc = {
+  id: string;
+  label: string;
+  sectionIdx: number;
+};
+
+function planTxtReader(
+  text: string,
+  sectionSize?: number,
+): {
+  sections: string[];
+  toc: ReaderTocItem[];
+  resolved: ResolvedTxtToc[];
+} {
+  // Catalog entries come from KMP chapter markers, not from layout splits.
+  const chapters = detectTxtChapters(text);
+  if (chapters.length === 0) {
+    const sections = splitIntoSections(text, sectionSize);
+    const start: ResolvedTxtToc = {
+      id: "start",
+      label: "Start",
+      sectionIdx: 0,
+    };
+    return {
+      sections,
+      toc: [{ id: start.id, label: start.label, level: 0 }],
+      resolved: [start],
+    };
+  }
+
+  const sections: string[] = [];
+  const resolved: ResolvedTxtToc[] = [];
+
+  const firstStart = chapters[0].start;
+  if (firstStart > 0) {
+    sections.push(...splitIntoSections(text.slice(0, firstStart), sectionSize));
+  }
+
+  for (let i = 0; i < chapters.length; i++) {
+    const start = chapters[i].start;
+    const end = i + 1 < chapters.length ? chapters[i + 1].start : text.length;
+    const parts = splitIntoSections(text.slice(start, end), sectionSize);
+    const id = `ch-${i}`;
+    resolved.push({
+      id,
+      label: chapters[i].label,
+      sectionIdx: sections.length,
+    });
+    sections.push(...parts);
+  }
+
+  return {
+    sections: sections.length > 0 ? sections : [text],
+    toc: resolved.map(({ id, label }) => ({ id, label, level: 0 })),
+    resolved,
+  };
+}
+
 export function mountTxtReader(options: TxtMountOptions): ReaderRendition {
   const {
     text,
@@ -67,9 +127,7 @@ export function mountTxtReader(options: TxtMountOptions): ReaderRendition {
     onTocActive,
     sectionSize,
   } = options;
-  // Sections are only a layout/performance split — not real chapters.
-  // Do not invent a Contents sidebar for TXT.
-  const sections = splitIntoSections(text, sectionSize);
+  const { sections, toc, resolved } = planTxtReader(text, sectionSize);
 
   const reader = createFlowReader({
     contentEl,
@@ -82,12 +140,31 @@ export function mountTxtReader(options: TxtMountOptions): ReaderRendition {
     card: { className: "reader-txt" },
     fontSizeTarget: "pager",
     onNavChange,
-    toc: [],
+    toc,
+    tocTarget: (id) => {
+      const entry = resolved.find((t) => t.id === id);
+      return entry ? { sectionIdx: entry.sectionIdx } : null;
+    },
+    tocActive: (idx) => {
+      const exact = resolved.find((t) => t.sectionIdx === idx);
+      if (exact) return exact.id;
+      let nearest: ResolvedTxtToc | null = null;
+      for (const t of resolved) {
+        if (t.sectionIdx <= idx) nearest = t;
+      }
+      return nearest?.id ?? null;
+    },
     onToc,
     onTocActive,
-    label: ({ page, pageCount, mode: m }) => {
-      if (m === "scroll") return "Continuous scroll";
-      return `Page ${page + 1} of ${pageCount}`;
+    label: ({ sectionIdx, page, pageCount, mode: m }) => {
+      let nearest: ResolvedTxtToc | null = null;
+      for (const t of resolved) {
+        if (t.sectionIdx <= sectionIdx) nearest = t;
+      }
+      const base = nearest?.label;
+      if (m === "scroll") return base || "Continuous scroll";
+      const pagePart = `Page ${page + 1} of ${pageCount}`;
+      return base ? `${base} · ${pagePart}` : pagePart;
     },
   });
 

@@ -1,14 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { BookOpen } from "lucide-react";
 
 import { BookCard, type BookCardMenuItem } from "@/components/book-card";
+import { BookDetailOverlay } from "@/components/book-detail-overlay";
 import { BookReader } from "@/components/book-reader";
+import { RateReviewDialog } from "@/components/rate-review-dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   isInMyLibrary,
   removeFromMyLibrary,
-  type BookRating,
   type BookStatus,
   type LibraryBook,
   type LibraryShelf,
@@ -17,12 +20,14 @@ import {
 import {
   applyShelfEntry,
   enrichEpubPdfCovers,
+  ensureCover,
   fetchLibraryBooks,
   migrateLocalBooks,
   openLibraryBook,
   removeShelfEntry,
   updateShelfEntry,
 } from "@/lib/library-api";
+import { bookIdFromLibraryPath, libraryPath } from "@/lib/library-path";
 
 function bookStatus(book: LibraryBook): BookStatus | undefined {
   return book.status;
@@ -50,11 +55,21 @@ export function LibrarySection({
   userId: string;
   shelf?: LibraryShelf;
 }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const selectedBookId = bookIdFromLibraryPath(pathname);
+
   const [books, setBooks] = useState<LibraryBook[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentBook, setCurrentBook] = useState<LibraryBook | null>(null);
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const [reviewBook, setReviewBook] = useState<LibraryBook | null>(null);
+  const priorityCoverIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    priorityCoverIdRef.current = selectedBookId;
+  }, [selectedBookId]);
 
   // Load shared catalog + personal shelf from the API (cloud source of truth).
   useEffect(() => {
@@ -77,6 +92,7 @@ export function LibrarySection({
             );
           },
           signal,
+          priorityCoverIdRef.current,
         );
       } catch (err) {
         console.error(err);
@@ -108,6 +124,42 @@ export function LibrarySection({
       .filter((b) => matchesShelf(b, shelf))
       .sort((a, b) => b.addedAt.getTime() - a.addedAt.getTime());
   }, [books, shelf]);
+
+  const selectedBook = useMemo(() => {
+    if (!selectedBookId) return null;
+    return books.find((b) => b.id === selectedBookId) ?? null;
+  }, [books, selectedBookId]);
+  const selectedCoverReady = Boolean(selectedBook?.coverImage);
+
+  useEffect(() => {
+    if (!selectedBookId || !selectedBook || selectedCoverReady) return;
+    const book = selectedBook;
+    let cancelled = false;
+    void ensureCover(book).then((cover) => {
+      if (cancelled || !cover) return;
+      setBooks((prev) =>
+        prev.map((b) =>
+          b.id === book.id && !b.coverImage ? { ...b, coverImage: cover } : b,
+        ),
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedBook, selectedBookId, selectedCoverReady]);
+
+  const closeDetail = useCallback(() => {
+    router.push("/library", { scroll: false });
+  }, [router]);
+
+  const openDetail = (book: LibraryBook) => {
+    router.push(libraryPath(book.id), { scroll: false });
+  };
+
+  useEffect(() => {
+    if (shelf === "home" || !selectedBookId) return;
+    router.replace(libraryPath(null, shelf), { scroll: false });
+  }, [router, selectedBookId, shelf]);
 
   const patchBook = async (
     book: LibraryBook,
@@ -210,13 +262,105 @@ export function LibrarySection({
   }, []);
 
   const isHome = shelf === "home";
+  const showDetail = isHome && Boolean(selectedBookId) && !currentBook;
+
+  const overlays = (
+    <>
+      {showDetail ? (
+        <BookDetailOverlay
+          book={selectedBook}
+          catalogReady={!loading}
+          onClose={closeDetail}
+          onRead={() => {
+            if (selectedBook) void openBook(selectedBook);
+          }}
+          onToggleFavorite={() => {
+            if (!selectedBook) return;
+            const next = !selectedBook.favorite;
+            void patchBook(
+              selectedBook,
+              {
+                favorite: next,
+                ...(next ? { inMyLibrary: true } : {}),
+              },
+              {
+                favorite: next,
+                ...(next ? { inMyLibrary: true } : {}),
+              },
+            );
+          }}
+          onAddToShelf={() => {
+            if (!selectedBook || isInMyLibrary(selectedBook)) return;
+            void patchBook(
+              selectedBook,
+              { inMyLibrary: true },
+              { inMyLibrary: true },
+            );
+          }}
+          reading={Boolean(openingId)}
+        />
+      ) : null}
+
+      <RateReviewDialog
+        book={
+          reviewBook
+            ? (books.find((b) => b.id === reviewBook.id) ?? reviewBook)
+            : null
+        }
+        open={Boolean(reviewBook)}
+        onOpenChange={(open) => {
+          if (!open) setReviewBook(null);
+        }}
+        onSave={(payload) => {
+          if (!reviewBook) return;
+          void patchBook(reviewBook, payload, payload);
+        }}
+        onDelete={() => {
+          if (!reviewBook) return;
+          void patchBook(
+            reviewBook,
+            { rating: 0, reviewTitle: "", reviewBody: "" },
+            { rating: 0, reviewTitle: "", reviewBody: "" },
+          );
+        }}
+      />
+    </>
+  );
+
+  if (currentBook) {
+    return (
+      <>
+        <BookReader
+          book={currentBook}
+          userId={userId}
+          onClose={() => setCurrentBook(null)}
+          onProgress={onProgress}
+        />
+        {overlays}
+      </>
+    );
+  }
 
   if (loading) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 py-20 text-center">
-        <div className="size-8 animate-spin rounded-full border-2 border-navy/20 border-t-navy" />
-        <p className="text-sm text-muted-foreground">Loading library…</p>
-      </div>
+      <>
+        <div
+          className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-x-5 gap-y-8 sm:grid-cols-[repeat(auto-fill,minmax(156px,1fr))]"
+          aria-busy
+          aria-label="Loading book collection"
+        >
+          {Array.from({ length: 8 }, (_, i) => (
+            <div key={i} className="flex flex-col">
+              <Skeleton
+                className="w-full rounded-sm"
+                style={{ aspectRatio: "210 / 297" }}
+              />
+              <Skeleton className="mt-2 h-4 w-3/4" />
+            </div>
+          ))}
+        </div>
+        {overlays}
+      </>
     );
   }
 
@@ -224,14 +368,17 @@ export function LibrarySection({
     const emptyLabel =
       shelf === "home" ? "No books yet" : "No books on this shelf";
     return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 py-20 text-center">
-        <div className="flex size-16 items-center justify-center rounded-2xl bg-muted text-navy/40">
-          <BookOpen className="size-8" />
+      <>
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 py-20 text-center">
+          <div className="flex size-16 items-center justify-center rounded-2xl bg-muted text-navy/40">
+            <BookOpen className="size-8" />
+          </div>
+          <p className="text-[1.1rem] font-semibold text-foreground">
+            {emptyLabel}
+          </p>
         </div>
-        <p className="text-[1.1rem] font-semibold text-foreground">
-          {emptyLabel}
-        </p>
-      </div>
+        {overlays}
+      </>
     );
   }
 
@@ -288,6 +435,13 @@ export function LibrarySection({
                 },
               ]
             : [
+                {
+                  label: "Rate and Review",
+                  onSelect: () => {
+                    setMenuOpenId(null);
+                    setReviewBook(book);
+                  },
+                },
                 {
                   label: book.favorite
                     ? "Remove Favorite"
@@ -350,15 +504,11 @@ export function LibrarySection({
             <BookCard
               key={book.id}
               book={book}
-              onOpen={() => void openBook(book)}
-              showProgress={!isHome}
-              showRating
-              onRate={
-                isHome
-                  ? undefined
-                  : (rating: BookRating) =>
-                      void patchBook(book, { rating }, { rating })
+              onOpen={() =>
+                isHome ? openDetail(book) : void openBook(book)
               }
+              showProgress={!isHome}
+              showRating={false}
               menuOpen={menuOpenId === book.id}
               onMenuOpenChange={(open) =>
                 setMenuOpenId(open ? book.id : null)
@@ -369,14 +519,7 @@ export function LibrarySection({
         })}
       </div>
 
-      {currentBook ? (
-        <BookReader
-          book={currentBook}
-          userId={userId}
-          onClose={() => setCurrentBook(null)}
-          onProgress={onProgress}
-        />
-      ) : null}
+      {overlays}
     </>
   );
 }

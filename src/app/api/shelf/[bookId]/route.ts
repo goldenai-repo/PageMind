@@ -8,9 +8,11 @@ import type {
 } from "@/lib/books";
 import { getCurrentUser } from "@/lib/firebase/auth-server";
 import {
+  authorNameFromToken,
   booksCollection,
   setCatalogUserRating,
   shelfEntryFromDoc,
+  syncPublicReview,
   userBooksCollection,
   type UserBookDoc,
 } from "@/lib/library-server";
@@ -22,10 +24,20 @@ type ShelfPatch = {
   favorite?: boolean;
   status?: BookStatus | null;
   rating?: BookRating;
+  reviewTitle?: string;
+  reviewBody?: string;
   progress?: ReadingProgressUpdate;
   lastOpenedAt?: string | null;
   locator?: ReadingLocator | null;
 };
+
+const MAX_REVIEW_TITLE = 200;
+const MAX_REVIEW_BODY = 8000;
+
+function asReviewText(value: unknown, max: number): string | undefined {
+  if (typeof value !== "string") return undefined;
+  return value.slice(0, max);
+}
 
 function isBookRating(value: unknown): value is BookRating {
   return (
@@ -54,6 +66,9 @@ export async function PATCH(
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
+  const reviewTitle = asReviewText(patch.reviewTitle, MAX_REVIEW_TITLE);
+  const reviewBody = asReviewText(patch.reviewBody, MAX_REVIEW_BODY);
+
   const hasUpdate =
     typeof patch.archived === "boolean" ||
     patch.markRead === true ||
@@ -61,6 +76,8 @@ export async function PATCH(
     typeof patch.favorite === "boolean" ||
     patch.status !== undefined ||
     isBookRating(patch.rating) ||
+    reviewTitle !== undefined ||
+    reviewBody !== undefined ||
     patch.progress != null ||
     patch.lastOpenedAt !== undefined ||
     patch.locator !== undefined;
@@ -103,6 +120,8 @@ export async function PATCH(
     }
   }
   if (isBookRating(patch.rating)) update.rating = patch.rating;
+  if (reviewTitle !== undefined) update.reviewTitle = reviewTitle;
+  if (reviewBody !== undefined) update.reviewBody = reviewBody;
   if (patch.progress) {
     update.inMyLibrary = true;
     update.lastReadPage = patch.progress.lastReadPage;
@@ -121,6 +140,19 @@ export async function PATCH(
   let catalogRating: { averageRating: number; ratingCount: number } | undefined;
   if (isBookRating(patch.rating)) {
     catalogRating = await setCatalogUserRating(bookId, user.uid, patch.rating);
+  }
+
+  if (
+    isBookRating(patch.rating) ||
+    reviewTitle !== undefined ||
+    reviewBody !== undefined
+  ) {
+    const latest = (await ref.get()).data() as UserBookDoc | undefined;
+    await syncPublicReview(bookId, user.uid, authorNameFromToken(user), {
+      rating: latest?.rating,
+      reviewTitle: latest?.reviewTitle,
+      reviewBody: latest?.reviewBody,
+    });
   }
 
   return NextResponse.json({

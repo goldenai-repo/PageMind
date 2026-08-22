@@ -1,7 +1,7 @@
-import { defineConfig } from "vitest/config";
 import path from "path";
+import type { ViteUserConfig } from "vitest/config";
 
-export default defineConfig({
+export default {
   test: {
     environment: "jsdom",
     globals: true,
@@ -12,4 +12,4 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
-});
+} satisfies ViteUserConfig;

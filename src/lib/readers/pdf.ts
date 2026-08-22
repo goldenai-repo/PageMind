@@ -6,6 +6,100 @@ import type {
   ReaderTocItem,
 } from "./types";
 
+type PdfOutlineNode = {
+  title?: string;
+  dest?: unknown;
+  items?: PdfOutlineNode[];
+};
+
+type PdfTocEntry = ReaderTocItem & { page: number };
+
+type PdfProxy = {
+  getOutline?: () => Promise<PdfOutlineNode[] | null>;
+  getDestination?: (name: string) => Promise<unknown>;
+  getPageIndex: (ref: never) => Promise<number>;
+};
+
+async function pageFromDest(
+  pdf: PdfProxy,
+  dest: unknown,
+): Promise<number | null> {
+  try {
+    let current: unknown = dest;
+    if (
+      current &&
+      typeof current === "object" &&
+      !Array.isArray(current) &&
+      "name" in current
+    ) {
+      current = (current as { name: unknown }).name;
+    }
+    if (typeof current === "string") {
+      current = await pdf.getDestination?.(current);
+    }
+    if (!Array.isArray(current) || current[0] == null) return null;
+    const head = current[0];
+    if (typeof head === "number" && Number.isInteger(head) && head >= 0) {
+      return head + 1;
+    }
+    const index = await pdf.getPageIndex(head as never);
+    if (!Number.isInteger(index) || index < 0) return null;
+    return index + 1;
+  } catch {
+    return null;
+  }
+}
+
+async function flattenPdfOutline(
+  pdf: PdfProxy,
+  nodes: PdfOutlineNode[] | null | undefined,
+  level: number,
+  out: PdfTocEntry[],
+): Promise<void> {
+  if (!nodes?.length) return;
+  for (const node of nodes) {
+    const label = node.title?.replace(/\s+/g, " ").trim();
+    let page = await pageFromDest(pdf, node.dest);
+    if (page == null && node.items?.length) {
+      page = await pageFromDest(pdf, node.items[0]?.dest);
+    }
+    if (label && page != null) {
+      out.push({
+        id: `ch-${out.length}`,
+        label,
+        level,
+        page,
+      });
+    }
+    if (node.items?.length) {
+      await flattenPdfOutline(pdf, node.items, level + 1, out);
+    }
+  }
+}
+
+async function loadPdfChapterToc(
+  pdf: PdfProxy,
+  totalPages: number,
+): Promise<PdfTocEntry[]> {
+  // Same source Preview uses: the PDF catalog outline / bookmarks tree.
+  try {
+    const outline = (await pdf.getOutline?.()) ?? null;
+    const entries: PdfTocEntry[] = [];
+    await flattenPdfOutline(pdf, outline, 0, entries);
+    return entries.filter((e) => e.page >= 1 && e.page <= totalPages);
+  } catch {
+    return [];
+  }
+}
+
+function activePdfTocId(entries: PdfTocEntry[], page: number): string | null {
+  let current: PdfTocEntry | null = null;
+  for (const entry of entries) {
+    if (entry.page <= page) current = entry;
+  }
+  return current?.id ?? null;
+}
+
 export type PdfMountOptions = {
   data: ArrayBuffer;
   contentEl: HTMLElement;
@@ -42,13 +136,9 @@ export async function mountPdfReader(
     Math.max(1, options.initialPage ?? 1),
   );
 
-  // Sidebar entries: one per page.
-  onToc?.(
-    Array.from({ length: totalPages }, (_, i) => ({
-      id: `page-${i + 1}`,
-      label: `Page ${i + 1}`,
-    })),
-  );
+  const tocEntries = await loadPdfChapterToc(pdf, totalPages);
+  const tocPageById = new Map(tocEntries.map((e) => [e.id, e.page]));
+  onToc?.(tocEntries.map(({ id, label, level }) => ({ id, label, level })));
 
   const wrapper = document.createElement("div");
   wrapper.className =
@@ -143,7 +233,7 @@ export async function mountPdfReader(
       totalPages,
       progressPercent: computeProgressPercent(n, totalPages),
     });
-    onTocActive?.(`page-${n}`);
+    onTocActive?.(activePdfTocId(tocEntries, n));
 
     // Warm the pages a turn away in either direction
     for (const m of [n + 1, n - 1]) {
@@ -196,8 +286,8 @@ export async function mountPdfReader(
       }
     },
     goToTocItem: async (id) => {
-      const n = Number(id.replace("page-", ""));
-      if (Number.isInteger(n) && n >= 1 && n <= totalPages) {
+      const n = tocPageById.get(id);
+      if (n != null && n >= 1 && n <= totalPages) {
         current = n;
         await show(current);
       }
