@@ -300,6 +300,7 @@ export function BookReader({ book, onClose, userId, onProgress }: BookReaderProp
             onNavChange: handleNavChange,
             onToc: handleToc,
             onTocActive: handleTocActive,
+            chapters: mountedBook.txtChapters,
           });
         } else if (mountedBook.ext === "pdf") {
           if (!(mountedBook.data instanceof ArrayBuffer)) {

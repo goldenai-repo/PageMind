@@ -7,6 +7,8 @@ import {
   loadBookFile,
   type BookDoc,
 } from "@/lib/library-server";
+import { decodeText } from "@/lib/readers/decode-text";
+import { detectTxtChapters } from "@/lib/readers/txt-chapters";
 
 export async function GET(
   _request: Request,
@@ -26,6 +28,19 @@ export async function GET(
 
   try {
     const bytes = await loadBookFile(id, doc);
+
+    if (doc.ext === "txt" && !doc.txtChaptersReady) {
+      const copy = new Uint8Array(bytes.byteLength);
+      copy.set(bytes);
+      const chapters = detectTxtChapters(decodeText(copy.buffer as ArrayBuffer));
+      await booksCollection()
+        .doc(id)
+        .set(
+          { txtChapters: chapters, txtChaptersReady: true },
+          { merge: true },
+        );
+    }
+
     const body = new Uint8Array(bytes).buffer;
 
     return new Response(body, {

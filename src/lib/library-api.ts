@@ -13,6 +13,7 @@ import {
 import { peekCover, rememberCover } from "./cover-cache";
 import { extractCoverImage, coverFromTitle } from "./cover";
 import { decodeText } from "./readers/decode-text";
+import { needsCatalogTitleLookup } from "./book-metadata";
 import {
   attachCachedCovers,
   deleteBookRecord,
@@ -289,9 +290,44 @@ export async function enrichEpubPdfCovers(
   }
 }
 
+/**
+ * Replace filename-stem titles with EPUB/PDF metadata or Google Books names.
+ * Runs after the grid paints; first visit backfills Firestore via /summary.
+ */
+export async function enrichCatalogTitles(
+  books: LibraryBook[],
+  onMeta: (bookId: string, meta: { title?: string; author?: string }) => void,
+  signal?: { cancelled: boolean },
+  priorityId?: string | null,
+): Promise<void> {
+  const ordered = priorityId
+    ? [...books].sort(
+        (a, b) => Number(b.id === priorityId) - Number(a.id === priorityId),
+      )
+    : books;
+
+  for (const book of ordered) {
+    if (signal?.cancelled) return;
+    if (!needsCatalogTitleLookup(book)) continue;
+    try {
+      const data = await fetchBookSummary(book.id);
+      if (signal?.cancelled) return;
+      const title = data.title?.trim();
+      const author = data.author?.trim();
+      if (!title && !author) continue;
+      onMeta(book.id, {
+        ...(title ? { title } : {}),
+        ...(author ? { author } : {}),
+      });
+    } catch (err) {
+      console.error(`Title lookup failed for ${book.id}:`, err);
+    }
+  }
+}
+
 /** Open a catalog book: download bytes + ensure My Library membership. */
 export async function openLibraryBook(book: LibraryBook): Promise<LibraryBook> {
-  const [withData, entry] = await Promise.all([
+  const [withData, entry, summary] = await Promise.all([
     loadBookData(book),
     book.inMyLibrary
       ? updateShelfEntry(book.id, {
@@ -303,6 +339,9 @@ export async function openLibraryBook(book: LibraryBook): Promise<LibraryBook> {
           markRead: true,
           lastOpenedAt: new Date().toISOString(),
         }),
+    needsCatalogTitleLookup(book)
+      ? fetchBookSummary(book.id).catch(() => null)
+      : Promise.resolve(null),
   ]);
 
   const coverImage =
@@ -320,6 +359,8 @@ export async function openLibraryBook(book: LibraryBook): Promise<LibraryBook> {
     ...merged,
     data: withData.data,
     coverImage: coverImage ?? undefined,
+    ...(summary?.title ? { title: summary.title } : {}),
+    ...(summary?.author ? { author: summary.author } : {}),
   };
 }
 

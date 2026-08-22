@@ -20,6 +20,12 @@ describe("buildSearchQueries", () => {
     expect(q.at(-1)).toContain("F. Scott Fitzgerald");
   });
 
+  it("humanizes filename slugs so intitle can match", () => {
+    const q = buildSearchQueries("the-great-gatsby");
+    expect(q[0]).toBe('intitle:"the great gatsby"');
+    expect(q).toContain("the great gatsby");
+  });
+
   it("strips quotes from the query parts", () => {
     const q = buildSearchQueries('The "Gatsby"', 'F"itz');
     expect(q[0]).toBe('intitle:"The Gatsby" inauthor:"F itz"');
@@ -123,6 +129,7 @@ describe("fetchGoogleBookSummary", () => {
       fetchImpl as unknown as typeof fetch,
     );
     expect(result?.text).toBe("Jay Gatsby and Daisy Buchanan.");
+    expect(result?.title).toBe("The Great Gatsby");
     expect(result?.infoLink).toContain("gatsby");
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });

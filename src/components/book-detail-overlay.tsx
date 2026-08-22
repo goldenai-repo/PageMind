@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Heart, Library, XIcon } from "lucide-react";
 
 import { BookCover } from "@/components/book-cover";
@@ -38,6 +38,7 @@ type BookDetailOverlayProps = {
   onToggleFavorite: () => void;
   onAddToShelf: () => void;
   reading?: boolean;
+  onResolvedMeta?: (meta: { title?: string; author?: string }) => void;
 };
 
 const FORMAT_LABEL: Record<LibraryBook["ext"], string> = {
@@ -54,17 +55,39 @@ export function BookDetailOverlay({
   onToggleFavorite,
   onAddToShelf,
   reading = false,
+  onResolvedMeta,
 }: BookDetailOverlayProps) {
   const averageRating = book?.averageRating ?? 0;
   const ratingCount = book?.ratingCount ?? 0;
   const pages = book?.totalPages;
   const favorited = Boolean(book?.favorite);
   const onShelf = book ? isInMyLibrary(book) : false;
-  const [panel, setPanel] = useState<"book" | "reviews">("book");
+  const [reviewsForId, setReviewsForId] = useState<string | null>(null);
+  const [resolvedMeta, setResolvedMeta] = useState<{
+    bookId: string;
+    title?: string;
+    author?: string;
+  } | null>(null);
 
-  useEffect(() => {
-    setPanel("book");
-  }, [book?.id]);
+  const displayTitle =
+    resolvedMeta?.bookId === book?.id
+      ? resolvedMeta.title || book?.title
+      : book?.title;
+  const displayAuthor =
+    resolvedMeta?.bookId === book?.id
+      ? resolvedMeta.author || book?.author
+      : book?.author;
+
+  const bookId = book?.id;
+  const onSummaryMeta = useCallback(
+    (meta: { title?: string; author?: string }) => {
+      if (!bookId) return;
+      setResolvedMeta({ bookId, ...meta });
+      onResolvedMeta?.(meta);
+    },
+    [bookId, onResolvedMeta],
+  );
+  const showReviews = Boolean(book && reviewsForId === book.id);
 
   return (
     <Dialog
@@ -78,10 +101,10 @@ export function BookDetailOverlay({
         overlayClassName="bg-navy-dark/35 backdrop-blur-[1px]"
         className="flex max-h-[min(82vh,760px)] w-full max-w-3xl flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl"
       >
-        {panel === "reviews" && book ? (
+        {showReviews && book ? (
           <BookReviewsView
             bookId={book.id}
-            onBack={() => setPanel("book")}
+            onBack={() => setReviewsForId(null)}
           />
         ) : (
           <>
@@ -126,10 +149,17 @@ export function BookDetailOverlay({
                   {FORMAT_LABEL[book.ext]}
                 </p>
                 <DialogTitle className="mt-1 font-[family-name:var(--font-lora)] text-[1.75rem] leading-tight font-semibold text-white sm:text-[2rem]">
-                  {book.title}
+                  {displayTitle}
                 </DialogTitle>
+                {displayAuthor ? (
+                  <p className="mt-1.5 text-[0.95rem] text-white/75">
+                    {displayAuthor}
+                  </p>
+                ) : null}
                 <DialogDescription className="sr-only">
-                  {FORMAT_LABEL[book.ext]}. Average rating {averageRating.toFixed(1)}
+                  {FORMAT_LABEL[book.ext]}
+                  {displayAuthor ? ` by ${displayAuthor}` : ""}. Average rating{" "}
+                  {averageRating.toFixed(1)}
                   {ratingCount > 0 ? ` from ${ratingCount} ratings` : ""}.{" "}
                   {formatDate(book.addedAt)}
                   {typeof pages === "number" && pages > 0
@@ -225,12 +255,17 @@ export function BookDetailOverlay({
             >
               Summary
             </h3>
-            <BookSummaryBody bookId={book?.id ?? null} ready={Boolean(book)} />
+            <BookSummaryBody
+              key={book?.id ?? "none"}
+              bookId={book?.id ?? null}
+              ready={Boolean(book)}
+              onMeta={onSummaryMeta}
+            />
           </section>
           <BookReviewsPreview
             bookId={book?.id ?? null}
             ready={Boolean(book)}
-            onOpenAll={book ? () => setPanel("reviews") : undefined}
+            onOpenAll={book ? () => setReviewsForId(book.id) : undefined}
           />
         </div>
           </>
@@ -243,27 +278,32 @@ export function BookDetailOverlay({
 function BookSummaryBody({
   bookId,
   ready,
+  onMeta,
 }: {
   bookId: string | null;
   ready: boolean;
+  onMeta?: (meta: { title?: string; author?: string }) => void;
 }) {
   const [state, setState] = useState<
     | { status: "idle" }
     | { status: "loading" }
     | { status: "ready"; data: BookSummaryJson }
     | { status: "error"; message: string }
-  >({ status: "idle" });
+  >({ status: ready && bookId ? "loading" : "idle" });
 
   useEffect(() => {
-    if (!ready || !bookId) {
-      setState({ status: "idle" });
-      return;
-    }
+    if (!ready || !bookId) return;
     let cancelled = false;
-    setState({ status: "loading" });
     void fetchBookSummary(bookId)
       .then((data) => {
-        if (!cancelled) setState({ status: "ready", data });
+        if (cancelled) return;
+        setState({ status: "ready", data });
+        if (data.title || data.author) {
+          onMeta?.({
+            ...(data.title ? { title: data.title } : {}),
+            ...(data.author ? { author: data.author } : {}),
+          });
+        }
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -276,7 +316,7 @@ function BookSummaryBody({
     return () => {
       cancelled = true;
     };
-  }, [bookId, ready]);
+  }, [bookId, ready, onMeta]);
 
   if (!ready) {
     return <div className="mt-3 min-h-24" />;

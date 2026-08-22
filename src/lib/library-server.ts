@@ -12,6 +12,7 @@ import {
   type BookStatus,
   type ReadingLocator,
   type ShelfEntry,
+  type TxtChapterMeta,
 } from "./books";
 import { getAdminBucket, getAdminFirestore } from "./firebase/admin";
 import {
@@ -39,6 +40,11 @@ export type GoogleSummaryCache = {
   infoLink?: string | null;
   volumeId?: string | null;
   fetchedAt: string;
+  /** Title+author used for the lookup; stale when metadata improves. */
+  queryKey?: string;
+  /** Catalog title from the matched volume. */
+  title?: string | null;
+  matcherVersion?: number;
 };
 
 /** Firestore doc shape for `books/{id}` (shared library). */
@@ -52,6 +58,11 @@ export type BookDoc = {
   uploadedBy: string;
   /** Extracted from EPUB OPF / PDF Info when available. */
   author?: string;
+  /** `metadata` = EPUB/PDF Info; `google-books` = API title; `filename` = fallback. */
+  titleSource?: "metadata" | "google-books" | "filename";
+  /** TXT: KMP chapter map, computed once at upload / first file load. */
+  txtChapters?: TxtChapterMeta[];
+  txtChaptersReady?: boolean;
   /** Present for Storage-backed books. */
   storagePath?: string;
   /** Present for legacy chunk-backed books. */
@@ -208,6 +219,11 @@ export function bookMetaFromDoc(doc: DocumentSnapshot): BookMetaJson | null {
     addedAt: data.addedAt,
     averageRating,
     ratingCount,
+    ...(data.author ? { author: data.author } : {}),
+    ...(data.titleSource ? { titleSource: data.titleSource } : {}),
+    ...(data.txtChaptersReady
+      ? { txtChapters: data.txtChapters ?? [] }
+      : {}),
   };
 }
 
