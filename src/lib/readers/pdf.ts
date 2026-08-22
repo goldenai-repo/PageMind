@@ -292,6 +292,16 @@ export async function mountPdfReader(
         await show(current);
       }
     },
+    goToPassage: async (target) => {
+      if (
+        target.pageNumber != null &&
+        target.pageNumber >= 1 &&
+        target.pageNumber <= totalPages
+      ) {
+        current = target.pageNumber;
+        await show(current);
+      }
+    },
     getContext: async () => {
       const page = await pdf.getPage(current);
       const content = await page.getTextContent();

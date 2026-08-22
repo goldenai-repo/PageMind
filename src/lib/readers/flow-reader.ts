@@ -1,4 +1,5 @@
 import { computeSectionProgressPercent } from "@/lib/books";
+import { tipAnchorInText } from "@/lib/tips";
 
 import { mountFlipBook, prefetchFlipBook, type FlipHandle } from "./flip-book";
 import { createPaginator, type Paginator } from "./paginator";
@@ -50,6 +51,10 @@ export type FlowReaderOptions = {
   toc?: ReaderTocItem[];
   /** Resolve a sidebar entry id to a section (+ optional fragment). */
   tocTarget?: (id: string) => { sectionIdx: number; fragment?: string } | null;
+  /** Spine/file href for a section — used by smart notes to jump. */
+  hrefForSection?: (idx: number) => string | undefined;
+  /** Inverse of hrefForSection (filename match is fine). */
+  sectionForHref?: (href: string) => number | null;
   /** Which sidebar entry id is active for a given section. */
   tocActive?: (sectionIdx: number) => string | null;
   /** Emits the sidebar entries once they're known. */
@@ -98,6 +103,8 @@ export function createFlowReader(options: FlowReaderOptions): FlowReader {
     onDestroy,
     tocTarget,
     tocActive,
+    hrefForSection,
+    sectionForHref,
     onToc,
     onTocActive,
   } = options;
@@ -286,25 +293,30 @@ export function createFlowReader(options: FlowReaderOptions): FlowReader {
     contentEl.style.display = "block";
     contentEl.style.overflow = "auto";
 
-    // Outer sheet fills the reading area (white background always as tall as
-    // the box); the inner column grows with the text and scrolls.
+    // Outer sheet fills the reading area; inner is the centered measure.
+    // Book CSS (html/body → :scope) is applied on a child so it cannot
+    // override the centering margins — Holmes's cnepub stylesheet sets
+    // body { margin-left: 1%; margin-right: 1% } which would otherwise
+    // pin the column to the left in scroll mode.
     const scroller = document.createElement("div");
     scroller.className = "pm-scroll";
     const inner = document.createElement("div");
     inner.className = "pm-scroll-inner";
-    if (flowClassName) inner.classList.add(flowClassName);
-    inner.style.fontSize = `${fontSize}px`;
-    inner.innerHTML = withStyle(currentHtml);
+    const flow = document.createElement("div");
+    if (flowClassName) flow.classList.add(flowClassName);
+    flow.style.fontSize = `${fontSize}px`;
+    flow.innerHTML = withStyle(currentHtml);
+    inner.appendChild(flow);
     scroller.appendChild(inner);
     contentEl.appendChild(scroller);
-    scrollerEl = inner;
+    scrollerEl = flow;
     cardEl = null;
     pagerEl = null;
 
     emitNav(0, 1);
 
     if (opts.fragment) {
-      const target = inner.querySelector("#" + CSS.escape(opts.fragment));
+      const target = flow.querySelector("#" + CSS.escape(opts.fragment));
       target?.scrollIntoView();
     } else {
       contentEl.scrollTop = 0;
@@ -611,18 +623,78 @@ export function createFlowReader(options: FlowReaderOptions): FlowReader {
       if (!target) return;
       return showSection(target.sectionIdx, { fragment: target.fragment });
     },
+    async goToPassage(target: {
+      text: string;
+      chapterHref?: string;
+      pageNumber?: number;
+    }) {
+      const needle = target.text;
+      if (!needle.trim()) return;
+
+      const sectionText = () =>
+        currentHtml
+          .replace(/<style[\s\S]*?<\/style>/gi, " ")
+          .replace(/<[^>]+>/g, " ");
+
+      const revealOnCurrentSection = () => {
+        if (paginator) {
+          for (let p = 0; p < paginator.pageCount; p++) {
+            paginator.goTo(p);
+            if (tipAnchorInText(paginator.getVisibleText(), needle)) return true;
+          }
+          paginator.goTo(0);
+          return tipAnchorInText(paginator.getVisibleText(), needle);
+        }
+        if (scrollerEl) {
+          const hay = scrollerEl.innerText || "";
+          if (!tipAnchorInText(hay, needle)) return false;
+          const nodes = scrollerEl.querySelectorAll("p, h1, h2, h3, h4, li");
+          for (const el of nodes) {
+            if (tipAnchorInText(el.textContent ?? "", needle)) {
+              el.scrollIntoView({ block: "center" });
+              return true;
+            }
+          }
+          return true;
+        }
+        return tipAnchorInText(sectionText(), needle);
+      };
+
+      let idx: number | null = null;
+      if (target.chapterHref && sectionForHref) {
+        idx = sectionForHref(target.chapterHref);
+      }
+
+      if (idx != null) {
+        await Promise.resolve(showSection(idx));
+        revealOnCurrentSection();
+        return;
+      }
+
+      for (let i = 0; i < sectionCount; i++) {
+        await Promise.resolve(showSection(i));
+        if (!tipAnchorInText(sectionText(), needle)) continue;
+        revealOnCurrentSection();
+        return;
+      }
+    },
     themes: {
       fontSize: setFontSize,
     },
     getContext() {
+      const chapterHref = hrefForSection?.(sectionIdx);
       if (paginator) {
         return {
           text: paginator.getVisibleText(),
           pageNumber: paginator.page + 1,
+          ...(chapterHref ? { chapterHref } : {}),
         };
       }
       if (scrollerEl) {
-        return { text: scrollerEl.innerText || "" };
+        return {
+          text: scrollerEl.innerText || "",
+          ...(chapterHref ? { chapterHref } : {}),
+        };
       }
       return { text: "" };
     },

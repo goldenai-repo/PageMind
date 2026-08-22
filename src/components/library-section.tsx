@@ -151,6 +151,25 @@ export function LibrarySection({
   }, [books, selectedBookId]);
   const selectedCoverReady = Boolean(selectedBook?.coverImage);
 
+  // Deep-link / notes link to a book that wasn't in the last catalog fetch.
+  const missingReloadFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!selectedBookId || loading || selectedBook) {
+      if (selectedBook) missingReloadFor.current = null;
+      return;
+    }
+    if (missingReloadFor.current === selectedBookId) return;
+    missingReloadFor.current = selectedBookId;
+    void reload();
+  }, [selectedBookId, loading, selectedBook, reload]);
+
+  // Clicking another book's library URL while reading should leave the reader.
+  useEffect(() => {
+    if (currentBook && selectedBookId && currentBook.id !== selectedBookId) {
+      setCurrentBook(null);
+    }
+  }, [currentBook, selectedBookId]);
+
   useEffect(() => {
     if (!selectedBookId || !selectedBook || selectedCoverReady) return;
     const book = selectedBook;

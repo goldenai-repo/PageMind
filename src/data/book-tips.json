@@ -27,7 +27,12 @@
       "body": "这篇前言把谱系说得很清楚：神探配一个相对笨拙的同伴、用报纸启事把人召到侦探住所，都来自爱伦·坡 1841 年的《莫格街凶杀案》（ Dupin / 译文里的「杜邦」）。书架上现在有这本公版原作，打开就能对上福尔摩斯的配方。",
       "anchorText": "爱伦﹒坡继承的痕迹",
       "chapterHref": "OPS/chapter1.html",
-      "references": []
+      "references": [
+        {
+          "label": "Open 《莫格街凶杀案》",
+          "url": "/library/7e8c2a14-6b5f-4d91-a3e0-1c9f4b8d2e70"
+        }
+      ]
     },
     {
       "type": "connection",
@@ -76,7 +81,12 @@
       "title": "福尔摩斯的配方从这里来",
       "body": "开篇就点明：这本书是《福尔摩斯探案全集》前言里点名的老师。神探杜邦、略显迟钝的同伴叙事者、把相关人召到侦探住所的报纸启事——柯南·道尔几乎原样搬进了贝克街。两本对照着读，师承一眼能看出来。",
       "anchorText": "书架上那本福尔摩斯，和这本书是一对",
-      "references": []
+      "references": [
+        {
+          "label": "Open 《福尔摩斯探案全集》",
+          "url": "/library/ed91998e-cb87-4934-903c-737d5ca91fc5"
+        }
+      ]
     },
     {
       "type": "background",

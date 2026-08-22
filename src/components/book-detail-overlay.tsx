@@ -69,14 +69,15 @@ export function BookDetailOverlay({
     author?: string;
   } | null>(null);
 
-  const displayTitle =
-    resolvedMeta?.bookId === book?.id
-      ? resolvedMeta.title || book?.title
-      : book?.title;
-  const displayAuthor =
-    resolvedMeta?.bookId === book?.id
-      ? resolvedMeta.author || book?.author
-      : book?.author;
+  const metaMatches = Boolean(
+    resolvedMeta && book && resolvedMeta.bookId === book.id,
+  );
+  const displayTitle = metaMatches
+    ? resolvedMeta?.title || book?.title
+    : book?.title;
+  const displayAuthor = metaMatches
+    ? resolvedMeta?.author || book?.author
+    : book?.author;
 
   const bookId = book?.id;
   const onSummaryMeta = useCallback(

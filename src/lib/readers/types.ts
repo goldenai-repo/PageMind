@@ -47,4 +47,10 @@ export type ReaderRendition = {
   setMode?(mode: ReaderMode): void | Promise<void>;
   /** Jump to a sidebar entry by id (chapter/part/page). */
   goToTocItem?(id: string): void | Promise<void>;
+  /** Jump to the page/section that contains this passage (smart notes). */
+  goToPassage?(target: {
+    text: string;
+    chapterHref?: string;
+    pageNumber?: number;
+  }): void | Promise<void>;
 };
