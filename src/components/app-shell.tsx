@@ -49,7 +49,9 @@ function AppShellLayout({
   const reading = Boolean(useOptionalReaderToc()?.session);
 
   return (
-    <SidebarProvider>
+    <SidebarProvider
+      className={cn(reading && "h-svh overflow-hidden")}
+    >
       <Suspense fallback={null}>
         <AppSidebar user={user} />
       </Suspense>

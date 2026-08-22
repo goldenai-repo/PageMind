@@ -18,6 +18,13 @@ import {
   isReaderMode,
   type ReaderMode,
 } from "./readers/reader-mode";
+import {
+  displayNameFromUser,
+  hasWrittenReview,
+  voteCounts,
+  type ReviewDoc,
+  type ReviewVote,
+} from "./reviews";
 
 /**
  * Legacy path: book bytes in `books/{id}/chunks/{index}` (Spark-era workaround).
@@ -213,6 +220,10 @@ export function bookRatingsCollection(bookId: string): CollectionReference {
   return booksCollection().doc(bookId).collection("ratings");
 }
 
+export function bookReviewsCollection(bookId: string): CollectionReference {
+  return booksCollection().doc(bookId).collection("reviews");
+}
+
 function averageFromSumCount(ratingSum: number, ratingCount: number) {
   const count = Math.max(0, Math.floor(ratingCount));
   const sum = Math.max(0, Number(ratingSum));
@@ -290,6 +301,83 @@ function asRating(value: unknown): BookRating {
   const n = typeof value === "number" ? value : 0;
   if (n === 1 || n === 2 || n === 3 || n === 4 || n === 5) return n;
   return 0;
+}
+
+export function authorNameFromToken(user: {
+  name?: string;
+  email?: string;
+}): string {
+  return displayNameFromUser(user);
+}
+
+/** Publish or remove the catalog-visible written review for a user. */
+export async function syncPublicReview(
+  bookId: string,
+  uid: string,
+  authorName: string,
+  data: { rating?: number; reviewTitle?: string; reviewBody?: string },
+): Promise<void> {
+  const title = (data.reviewTitle ?? "").trim();
+  const body = (data.reviewBody ?? "").trim();
+  const ref = bookReviewsCollection(bookId).doc(uid);
+  if (!hasWrittenReview(title, body)) {
+    await ref.delete().catch(() => undefined);
+    return;
+  }
+  const now = new Date().toISOString();
+  const existing = await ref.get();
+  const prev = existing.data() as ReviewDoc | undefined;
+  await ref.set(
+    {
+      uid,
+      authorName,
+      rating: asRating(data.rating),
+      title,
+      body,
+      updatedAt: now,
+      createdAt: prev?.createdAt ?? now,
+    } satisfies Omit<ReviewDoc, "votes">,
+    { merge: true },
+  );
+}
+
+export function serializeReview(
+  id: string,
+  data: ReviewDoc,
+  viewerUid: string,
+) {
+  const counts = voteCounts(data.votes);
+  const myVote = data.votes?.[viewerUid] ?? null;
+  return {
+    id,
+    authorName: data.authorName || "Reader",
+    rating: asRating(data.rating),
+    title: typeof data.title === "string" ? data.title : "",
+    body: typeof data.body === "string" ? data.body : "",
+    createdAt: data.createdAt,
+    updatedAt: data.updatedAt,
+    helpfulCount: counts.helpfulCount,
+    notHelpfulCount: counts.notHelpfulCount,
+    myVote: myVote === "up" || myVote === "down" ? myVote : null,
+    isMine: id === viewerUid,
+  };
+}
+
+export async function applyReviewVote(
+  bookId: string,
+  reviewId: string,
+  voterUid: string,
+  vote: ReviewVote,
+): Promise<ReviewDoc | null> {
+  const ref = bookReviewsCollection(bookId).doc(reviewId);
+  const snap = await ref.get();
+  if (!snap.exists) return null;
+  const data = snap.data() as ReviewDoc;
+  const votes = { ...(data.votes ?? {}) };
+  if (votes[voterUid] === vote) delete votes[voterUid];
+  else votes[voterUid] = vote;
+  await ref.set({ votes }, { merge: true });
+  return { ...data, votes };
 }
 
 export function shelfEntryFromDoc(doc: DocumentSnapshot): ShelfEntry {

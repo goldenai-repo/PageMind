@@ -219,9 +219,15 @@ export function createFlowReader(options: FlowReaderOptions): FlowReader {
     if (contentElClass) contentEl.classList.add(contentElClass);
     contentEl.style.display = "flex";
     contentEl.style.justifyContent = "center";
+    contentEl.style.alignItems = "stretch";
     contentEl.style.overflow = "hidden";
 
     const card_ = buildCard();
+    card_.style.flex = "1 1 auto";
+    card_.style.minWidth = "0";
+    card_.style.width = "100%";
+    card_.style.height = "100%";
+    card_.style.alignSelf = "stretch";
     const viewport = document.createElement("div");
     // The page card fills the reading area; in single-page mode the text
     // column inside is kept to a comfortable measure (not full width).

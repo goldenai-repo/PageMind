@@ -8,9 +8,11 @@ import type {
 } from "@/lib/books";
 import { getCurrentUser } from "@/lib/firebase/auth-server";
 import {
+  authorNameFromToken,
   booksCollection,
   setCatalogUserRating,
   shelfEntryFromDoc,
+  syncPublicReview,
   userBooksCollection,
   type UserBookDoc,
 } from "@/lib/library-server";
@@ -138,6 +140,19 @@ export async function PATCH(
   let catalogRating: { averageRating: number; ratingCount: number } | undefined;
   if (isBookRating(patch.rating)) {
     catalogRating = await setCatalogUserRating(bookId, user.uid, patch.rating);
+  }
+
+  if (
+    isBookRating(patch.rating) ||
+    reviewTitle !== undefined ||
+    reviewBody !== undefined
+  ) {
+    const latest = (await ref.get()).data() as UserBookDoc | undefined;
+    await syncPublicReview(bookId, user.uid, authorNameFromToken(user), {
+      rating: latest?.rating,
+      reviewTitle: latest?.reviewTitle,
+      reviewBody: latest?.reviewBody,
+    });
   }
 
   return NextResponse.json({

@@ -20,10 +20,7 @@ import { ReaderNotesSidebar } from "@/components/reader-notes-sidebar";
 import { useOptionalReaderToc } from "@/components/reader-toc-context";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import {
-  SidebarProvider,
-  SidebarTrigger,
-} from "@/components/ui/sidebar";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import type { LibraryBook, ReadingProgressUpdate } from "@/lib/books";
 import { fetchTipsForBook, fetchUserPrefs, saveUserPrefs } from "@/lib/library-api";
 import { mountEpubReader } from "@/lib/readers/epub-engine";
@@ -412,7 +409,7 @@ export function BookReader({ book, onClose, userId, onProgress }: BookReaderProp
       aria-modal="true"
       aria-label="Book reader"
     >
-      <header className="relative z-20 flex h-16 shrink-0 items-center justify-between gap-4 border-b border-border bg-white px-4 sm:px-7">
+      <header className="relative z-30 flex h-16 shrink-0 items-center justify-between gap-4 border-b border-border bg-white px-4 sm:px-7">
         <div className="flex shrink-0 items-center gap-1">
           <SidebarTrigger
             title="Toggle contents"
@@ -440,26 +437,6 @@ export function BookReader({ book, onClose, userId, onProgress }: BookReaderProp
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
-          <Button
-            type="button"
-            variant="outline"
-            size="icon-sm"
-            title="Toggle smart notes"
-            aria-label="Toggle smart notes"
-            aria-pressed={notesOpen}
-            onClick={() => setNotesOpen((v) => !v)}
-            className={cn(
-              "relative rounded-md border-border bg-[#f0f2f5]",
-              notesOpen && "border-navy bg-navy/10 text-navy",
-            )}
-          >
-            <Lightbulb className="size-3.5" />
-            {tips.length > 0 ? (
-              <span className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-navy px-1 text-[0.6rem] font-bold text-white">
-                {tips.length}
-              </span>
-            ) : null}
-          </Button>
           {reflowable && (
             <div className="mr-1 flex items-center gap-0.5 rounded-md border border-border bg-[#f0f2f5] p-0.5">
               {READER_MODE_OPTIONS.map(({ value, label, icon: Icon }) => (
@@ -484,7 +461,6 @@ export function BookReader({ book, onClose, userId, onProgress }: BookReaderProp
           )}
           {reflowable && (
             <>
-              <div className="mx-1 h-[18px] w-px bg-border" />
               <Button
                 type="button"
                 variant="outline"
@@ -508,8 +484,29 @@ export function BookReader({ book, onClose, userId, onProgress }: BookReaderProp
               >
                 A+
               </Button>
+              <div className="mx-1 h-[18px] w-px bg-border" />
             </>
           )}
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            title="Toggle smart notes"
+            aria-label="Toggle smart notes"
+            aria-pressed={notesOpen}
+            onClick={() => setNotesOpen((v) => !v)}
+            className={cn(
+              "relative rounded-md border-border bg-[#f0f2f5]",
+              notesOpen && "border-navy bg-navy/10 text-navy",
+            )}
+          >
+            <Lightbulb className="size-3.5" />
+            {tips.length > 0 ? (
+              <span className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-navy px-1 text-[0.6rem] font-bold text-white">
+                {tips.length}
+              </span>
+            ) : null}
+          </Button>
         </div>
       </header>
 
@@ -518,8 +515,8 @@ export function BookReader({ book, onClose, userId, onProgress }: BookReaderProp
           <div
             ref={contentRef}
             className={cn(
-              "reader-content min-h-0 flex-1 overflow-hidden px-3 py-4 sm:px-6",
-              book.ext === "pdf" && "flex items-center justify-center",
+              "reader-content flex min-h-0 flex-1 justify-center overflow-hidden px-3 py-4 sm:px-6",
+              book.ext === "pdf" ? "items-center" : "items-stretch",
             )}
             tabIndex={0}
           />
@@ -573,19 +570,13 @@ export function BookReader({ book, onClose, userId, onProgress }: BookReaderProp
             </Button>
           </div>
         </div>
-        <SidebarProvider
-          open={notesOpen}
-          onOpenChange={setNotesOpen}
-          persist={false}
-          enableShortcut={false}
-          className="h-full min-h-0! w-auto"
-        >
+        {notesOpen ? (
           <ReaderNotesSidebar
             tips={tips}
             visibleTips={visibleTips}
             loading={tipsLoading}
           />
-        </SidebarProvider>
+        ) : null}
       </div>
     </div>
   );

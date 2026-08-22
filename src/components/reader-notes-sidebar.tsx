@@ -3,7 +3,6 @@
 import { Lightbulb } from "lucide-react";
 
 import {
-  Sidebar,
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
@@ -24,8 +23,11 @@ export function ReaderNotesSidebar({
   visibleTips: TipCard[];
   loading: boolean;
 }) {
+  // In-flow panel (not shadcn `Sidebar`): the app sidebar is `position:
+  // fixed` to the viewport, which would cover the reader header (mode
+  // switcher) and steal flex space from the page.
   return (
-    <Sidebar side="right" collapsible="offcanvas" className="z-20">
+    <aside className="flex h-full w-(--sidebar-width) shrink-0 flex-col border-l border-sidebar-border bg-sidebar text-sidebar-foreground">
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
@@ -110,6 +112,6 @@ export function ReaderNotesSidebar({
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-    </Sidebar>
+    </aside>
   );
 }

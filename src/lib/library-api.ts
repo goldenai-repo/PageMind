@@ -24,8 +24,13 @@ import {
 } from "./storage";
 import type { TipCard } from "./tips";
 import type { BookSummaryJson } from "./google-books";
+import type {
+  BookReview,
+  BookReviewsPayload,
+  ReviewVote,
+} from "./reviews";
 
-export type { BookSummaryJson };
+export type { BookSummaryJson, BookReview, BookReviewsPayload };
 
 async function readJson<T>(res: Response): Promise<T> {
   const data = (await res.json().catch(() => ({}))) as T & { error?: string };
@@ -59,6 +64,27 @@ export async function fetchTipsForBook(bookId: string): Promise<TipCard[]> {
 export async function fetchBookSummary(bookId: string): Promise<BookSummaryJson> {
   const res = await fetch(`/api/books/${bookId}/summary`);
   return readJson<BookSummaryJson>(res);
+}
+
+export async function fetchBookReviews(
+  bookId: string,
+): Promise<BookReviewsPayload> {
+  const res = await fetch(`/api/books/${bookId}/reviews`);
+  return readJson<BookReviewsPayload>(res);
+}
+
+export async function voteOnReview(
+  bookId: string,
+  reviewId: string,
+  vote: ReviewVote,
+): Promise<BookReview> {
+  const res = await fetch(`/api/books/${bookId}/reviews/${reviewId}/vote`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ vote }),
+  });
+  const data = await readJson<{ review: BookReview }>(res);
+  return data.review;
 }
 
 export async function uploadBook(file: File): Promise<BookMeta> {

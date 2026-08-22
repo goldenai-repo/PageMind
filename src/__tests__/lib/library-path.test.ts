@@ -1,7 +1,10 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 
 import {
   bookIdFromLibraryPath,
+  bookIdFromReviewsPath,
+  bookReviewsPath,
   libraryPath,
   parseLibraryShelf,
 } from "@/lib/library-path";
@@ -30,6 +33,15 @@ describe("bookIdFromLibraryPath", () => {
     expect(bookIdFromLibraryPath("/library")).toBeNull();
     expect(bookIdFromLibraryPath("/library/")).toBeNull();
     expect(bookIdFromLibraryPath("/library/abc-123")).toBe("abc-123");
+    expect(bookIdFromLibraryPath("/library/abc-123/reviews")).toBeNull();
     expect(bookIdFromLibraryPath("/upload")).toBeNull();
+  });
+});
+
+describe("reviews path", () => {
+  it("builds and parses /library/{id}/reviews", () => {
+    expect(bookReviewsPath("abc-123")).toBe("/library/abc-123/reviews");
+    expect(bookIdFromReviewsPath("/library/abc-123/reviews")).toBe("abc-123");
+    expect(bookIdFromReviewsPath("/library/abc-123")).toBeNull();
   });
 });

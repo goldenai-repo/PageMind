@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { Heart, Library, XIcon } from "lucide-react";
 
 import { BookCover } from "@/components/book-cover";
+import { BookReviewsPreview } from "@/components/book-reviews-preview";
+import { BookReviewsView } from "@/components/book-reviews-view";
 import { StarRating } from "@/components/star-rating";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -58,6 +60,11 @@ export function BookDetailOverlay({
   const pages = book?.totalPages;
   const favorited = Boolean(book?.favorite);
   const onShelf = book ? isInMyLibrary(book) : false;
+  const [panel, setPanel] = useState<"book" | "reviews">("book");
+
+  useEffect(() => {
+    setPanel("book");
+  }, [book?.id]);
 
   return (
     <Dialog
@@ -71,7 +78,14 @@ export function BookDetailOverlay({
         overlayClassName="bg-navy-dark/35 backdrop-blur-[1px]"
         className="flex max-h-[min(82vh,760px)] w-full max-w-3xl flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl"
       >
-        <div className="relative bg-navy-dark px-5 pt-4 pb-8 text-white sm:px-8 sm:pt-5 sm:pb-10">
+        {panel === "reviews" && book ? (
+          <BookReviewsView
+            bookId={book.id}
+            onBack={() => setPanel("book")}
+          />
+        ) : (
+          <>
+            <div className="relative bg-navy-dark px-5 pt-4 pb-8 text-white sm:px-8 sm:pt-5 sm:pb-10">
           <DialogClose
             render={
               <Button
@@ -213,16 +227,14 @@ export function BookDetailOverlay({
             </h3>
             <BookSummaryBody bookId={book?.id ?? null} ready={Boolean(book)} />
           </section>
-          <section aria-labelledby="book-review-heading" className="mt-8">
-            <h3
-              id="book-review-heading"
-              className="text-[0.95rem] font-semibold text-foreground"
-            >
-              Review
-            </h3>
-            <div className="mt-3 min-h-24" />
-          </section>
+          <BookReviewsPreview
+            bookId={book?.id ?? null}
+            ready={Boolean(book)}
+            onOpenAll={book ? () => setPanel("reviews") : undefined}
+          />
         </div>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );
