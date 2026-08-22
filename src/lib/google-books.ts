@@ -22,15 +22,22 @@ export type GoogleBooksList = {
 
 export type GoogleBookSummary = {
   text: string;
+  title: string | null;
   infoLink: string | null;
   volumeId: string | null;
+  authors: string[];
 };
+
+/** Bump when the matcher/query shape changes so stale negative caches retry. */
+export const GOOGLE_SUMMARY_MATCHER_VERSION = 2;
 
 /** Wire format for GET /api/books/[id]/summary */
 export type BookSummaryJson = {
   text: string | null;
   source: "google-books" | null;
   infoLink: string | null;
+  author?: string | null;
+  title?: string | null;
 };
 
 export class GoogleBooksError extends Error {
@@ -52,14 +59,27 @@ export function sanitizeQueryPart(value: string): string {
   return value.replace(/["“”]/g, " ").replace(/\s+/g, " ").trim();
 }
 
+/**
+ * Filename slugs (`the-great-gatsby`) fail `intitle:"the-great-gatsby"`.
+ * Search with spaces so Google Books can match the real title.
+ */
+export function titleForSearch(title: string): string {
+  return sanitizeQueryPart(
+    title
+      .replace(/^(?:pg|id)\s*\d+[\s._-]*/i, "")
+      .replace(/[-_]+/g, " "),
+  );
+}
+
 export function buildSearchQueries(title: string, author?: string): string[] {
-  const t = sanitizeQueryPart(title);
+  const t = titleForSearch(title);
   const a = author ? sanitizeQueryPart(author) : "";
   if (!t) return [];
   const queries: string[] = [];
   if (a) queries.push(`intitle:"${t}" inauthor:"${a}"`);
   queries.push(`intitle:"${t}"`);
   queries.push(a ? `"${t}" "${a}"` : `"${t}"`);
+  queries.push(a ? `${t} ${a}` : t);
   return [...new Set(queries)];
 }
 
@@ -165,7 +185,10 @@ export function pickBestVolume(
   for (const item of items) {
     const info = item.volumeInfo;
     if (!info?.title) continue;
-    const tScore = titleScore(title, info.title);
+    const tScore = Math.max(
+      titleScore(title, info.title),
+      titleScore(titleForSearch(title), info.title),
+    );
     if (tScore < TITLE_MATCH_MIN) continue;
     const desc = info.description ? htmlToPlainText(info.description) : "";
     const hasDesc = desc.length > 0;
@@ -188,8 +211,10 @@ function summaryFromVolume(item: GoogleBookVolume): GoogleBookSummary | null {
   if (!text) return null;
   return {
     text,
+    title: info?.title ? info.title.trim() : null,
     infoLink: info?.infoLink || info?.canonicalVolumeLink || null,
     volumeId: item.id ?? null,
+    authors: (info?.authors ?? []).map((n) => n.trim()).filter(Boolean),
   };
 }
 
@@ -203,7 +228,11 @@ export async function fetchGoogleBookSummary(
   for (const q of queries) {
     try {
       const list = await requestVolumes(q, opts.apiKey, fetchImpl);
-      const item = pickBestVolume(list.items ?? [], opts.title, opts.author);
+      const item = pickBestVolume(
+        list.items ?? [],
+        titleForSearch(opts.title) || opts.title,
+        opts.author,
+      );
       const summary = item ? summaryFromVolume(item) : null;
       if (summary) return summary;
     } catch (err) {
@@ -228,7 +257,7 @@ async function requestVolumes(
   const url = new URL(GOOGLE_BOOKS_URL);
   url.searchParams.set("q", q);
   url.searchParams.set("printType", "books");
-  url.searchParams.set("maxResults", "8");
+  url.searchParams.set("maxResults", "20");
   if (apiKey) url.searchParams.set("key", apiKey);
 
   const res = await fetchImpl(url.toString(), {

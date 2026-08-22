@@ -19,6 +19,7 @@ import {
 } from "@/lib/books";
 import {
   applyShelfEntry,
+  enrichCatalogTitles,
   enrichEpubPdfCovers,
   ensureCover,
   fetchLibraryBooks,
@@ -94,6 +95,25 @@ export function LibrarySection({
           signal,
           priorityCoverIdRef.current,
         );
+        void enrichCatalogTitles(
+          loaded,
+          (bookId, meta) => {
+            if (signal.cancelled) return;
+            setBooks((prev) =>
+              prev.map((b) =>
+                b.id === bookId
+                  ? {
+                      ...b,
+                      ...(meta.title ? { title: meta.title } : {}),
+                      ...(meta.author ? { author: meta.author } : {}),
+                    }
+                  : b,
+              ),
+            );
+          },
+          signal,
+          priorityCoverIdRef.current,
+        );
       } catch (err) {
         console.error(err);
       } finally {
@@ -131,6 +151,25 @@ export function LibrarySection({
   }, [books, selectedBookId]);
   const selectedCoverReady = Boolean(selectedBook?.coverImage);
 
+  // Deep-link / notes link to a book that wasn't in the last catalog fetch.
+  const missingReloadFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!selectedBookId || loading || selectedBook) {
+      if (selectedBook) missingReloadFor.current = null;
+      return;
+    }
+    if (missingReloadFor.current === selectedBookId) return;
+    missingReloadFor.current = selectedBookId;
+    void reload();
+  }, [selectedBookId, loading, selectedBook, reload]);
+
+  // Clicking another book's library URL while reading should leave the reader.
+  useEffect(() => {
+    if (currentBook && selectedBookId && currentBook.id !== selectedBookId) {
+      setCurrentBook(null);
+    }
+  }, [currentBook, selectedBookId]);
+
   useEffect(() => {
     if (!selectedBookId || !selectedBook || selectedCoverReady) return;
     const book = selectedBook;
@@ -149,17 +188,37 @@ export function LibrarySection({
   }, [selectedBook, selectedBookId, selectedCoverReady]);
 
   const closeDetail = useCallback(() => {
-    router.push("/library", { scroll: false });
-  }, [router]);
+    router.push(libraryPath(null, shelf), { scroll: false });
+  }, [router, shelf]);
 
   const openDetail = (book: LibraryBook) => {
-    router.push(libraryPath(book.id), { scroll: false });
+    router.push(libraryPath(book.id, shelf), { scroll: false });
   };
 
-  useEffect(() => {
-    if (shelf === "home" || !selectedBookId) return;
-    router.replace(libraryPath(null, shelf), { scroll: false });
-  }, [router, selectedBookId, shelf]);
+  const closeReader = useCallback(() => {
+    setCurrentBook(null);
+    if (shelf !== "home") {
+      router.push(libraryPath(null, shelf), { scroll: false });
+    }
+  }, [router, shelf]);
+
+  const onResolvedMeta = useCallback(
+    (meta: { title?: string; author?: string }) => {
+      if (!selectedBookId) return;
+      setBooks((prev) =>
+        prev.map((b) =>
+          b.id === selectedBookId
+            ? {
+                ...b,
+                ...(meta.title ? { title: meta.title } : {}),
+                ...(meta.author ? { author: meta.author } : {}),
+              }
+            : b,
+        ),
+      );
+    },
+    [selectedBookId],
+  );
 
   const patchBook = async (
     book: LibraryBook,
@@ -193,7 +252,10 @@ export function LibrarySection({
     }
   };
 
-  const openBook = async (book: LibraryBook) => {
+  const openBook = async (
+    book: LibraryBook,
+    opts?: { revertUrlOnError?: boolean },
+  ) => {
     if (openingId) return;
     setOpeningId(book.id);
     try {
@@ -212,6 +274,8 @@ export function LibrarySection({
                 rating: opened.rating ?? b.rating,
                 favorite: opened.favorite ?? b.favorite,
                 status: opened.status ?? b.status,
+                title: opened.title,
+                author: opened.author,
               }
             : b,
         ),
@@ -220,9 +284,17 @@ export function LibrarySection({
     } catch (err) {
       console.error(err);
       alert(err instanceof Error ? err.message : "Could not open this book.");
+      if (opts?.revertUrlOnError) {
+        router.replace(libraryPath(null, shelf), { scroll: false });
+      }
     } finally {
       setOpeningId(null);
     }
+  };
+
+  const openFromShelf = (book: LibraryBook) => {
+    router.push(libraryPath(book.id, shelf), { scroll: false });
+    void openBook(book, { revertUrlOnError: true });
   };
 
   const onProgress = useCallback((progress: ReadingProgressUpdate) => {
@@ -298,6 +370,7 @@ export function LibrarySection({
             );
           }}
           reading={Boolean(openingId)}
+          onResolvedMeta={onResolvedMeta}
         />
       ) : null}
 
@@ -333,7 +406,7 @@ export function LibrarySection({
         <BookReader
           book={currentBook}
           userId={userId}
-          onClose={() => setCurrentBook(null)}
+          onClose={closeReader}
           onProgress={onProgress}
         />
         {overlays}
@@ -505,7 +578,7 @@ export function LibrarySection({
               key={book.id}
               book={book}
               onOpen={() =>
-                isHome ? openDetail(book) : void openBook(book)
+                isHome ? openDetail(book) : openFromShelf(book)
               }
               showProgress={!isHome}
               showRating={false}

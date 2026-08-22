@@ -1,322 +1,415 @@
 {
-  "47f890fe-1c1f-47c6-8b25-1702a5fa578a": [
+  "ed91998e-cb87-4934-903c-737d5ca91fc5": [
     {
       "type": "background",
-      "title": "小说的自传底色",
-      "body": "《无出路咖啡馆》取材于严歌苓的亲身经历。上世纪九十年代她在美国留学期间，与一位美国外交官恋爱、结婚，因此被联邦调查局反复约谈审查。小说里“我”在审讯室中的处境，正映照作者当年被怀疑的真实遭遇。",
-      "anchorText": "挂着星条旗和联邦调查局的徽记",
-      "chapterHref": "article_320753.html",
-      "references": [
-        { "label": "维基百科：严歌苓", "url": "https://zh.wikipedia.org/wiki/严歌苓" }
-      ]
-    },
-    {
-      "type": "background",
-      "title": "“超龄留学生”与九十年代留学潮",
-      "body": "八九十年代赴美的中国自费留学生中，不少人已过而立之年，一边上学一边打工谋生，“超龄”是当时的普遍状态。这一细节勾勒出主人公在异国的经济窘迫与身份尴尬。",
-      "anchorText": "一个超龄留学生，像大多数亚洲女学生一样，留着最省钱的发式",
-      "chapterHref": "article_320753.html",
-      "references": []
-    },
-    {
-      "type": "connection",
-      "title": "严歌苓的移民书写",
-      "body": "本书属于严歌苓的移民/离散题材，与《扶桑》《少女小渔》一脉相承；她也写过《金陵十三钗》《陆犯焉识》（电影《归来》原著）等广为人知的作品。这类华人移民经验常被归入“新移民文学”。",
-      "anchorText": "如同大部分刚着陆到这块国度的中国人",
-      "chapterHref": "article_320753.html",
-      "references": []
-    },
-    {
-      "type": "background",
-      "title": "偷书的窘迫",
-      "body": "叙述者靠往羽绒服大口袋里塞课本来省下书钱——半年偷了十二本书、一瓶阿司匹林和一个针线盒。这些细节把留学生的赤贫写得触目，也成了 FBI 请她“喝茶”的表面由头。",
-      "anchorText": "在书店里把一本课堂急用的书塞进了羽绒服的大口袋",
-      "chapterHref": "article_320753.html",
-      "references": []
-    },
-    {
-      "type": "deep-dive",
-      "title": "审讯室里的心理博弈",
-      "body": "便衣福茨先脱衣、寒暄、再用手指敲击封面制造沉默——这是典型的审讯心理战：先以“东拉西扯”建立松弛感，再用停顿施压，让对方“如坐针毡”后主动开口。",
-      "anchorText": "他要我如坐针毡",
-      "chapterHref": "article_320754.html",
-      "references": []
-    },
-    {
-      "type": "background",
-      "title": "被审查的外交官恋情",
-      "body": "审讯的真正对象是“我”与美国外交官安德烈·戴维斯的关系。美国外交人员与外国公民（尤其来自敏感国家者）交往，会触发安全背景审查——这正是小说冲突的制度根源。",
-      "anchorText": "安德烈·戴维斯和你是什么关系",
-      "chapterHref": "article_320754.html",
-      "references": []
-    },
-    {
-      "type": "background",
-      "title": "当兵换学费：美国的《退伍军人权利法案》",
-      "body": "安德烈上大学前当过三年兵，靠军队资助读完大学。这指的是美国的《退伍军人权利法案》（G.I. Bill）——以服役换取学费与补助，是许多平民进入大学的途径。",
-      "anchorText": "美国军队提供上大学的费用",
-      "chapterHref": "article_320755.html",
-      "references": []
-    },
-    {
-      "type": "connection",
-      "title": "用德文朗诵《浮士德》",
-      "body": "审讯者借安德烈能用德文背诵歌德《浮士德》来反衬其“才子”形象。《浮士德》是德语文学的巅峰之作，能背诵原文往往被视为深厚人文修养的象征。",
-      "anchorText": "用德文朗诵过《浮士德》",
-      "chapterHref": "article_320755.html",
-      "references": [
-        { "label": "维基百科：浮士德", "url": "https://zh.wikipedia.org/wiki/浮士德" }
-      ]
-    },
-    {
-      "type": "background",
-      "title": "“间谍嫌疑”的由来",
-      "body": "审讯升级到指控“我”有中国军方间谍嫌疑。严歌苓本人曾在部队文工团服役多年，这段军旅背景在冷战余绪下的美国，正是引发怀疑的敏感点。",
-      "anchorText": "有中国军方间谍嫌疑",
-      "chapterHref": "article_320757.html",
-      "references": []
-    },
-    {
-      "type": "deep-dive",
-      "title": "童年的另一场审讯",
-      "body": "面对 FBI，叙述者想起六岁时目睹父母被审：审讯者手握军用皮带，铜钩每响一次，父母就在真话与谎言间摇摆。这段闪回把个人记忆与政治创伤叠印，也预告了后文的家族history。",
-      "anchorText": "手里一根真正的军用皮带",
-      "chapterHref": "article_320756.html",
-      "references": []
-    },
-    {
-      "type": "background",
-      "title": "文学写作专业",
-      "body": "叙述者主修“文学写作”（creative writing）——与严歌苓本人在美国攻读艺术硕士（MFA）的经历相合。这一身份让小说的自我审视与语言自觉格外突出。",
-      "anchorText": "主修文学写作",
-      "chapterHref": "article_320758.html",
-      "references": []
-    },
-    {
-      "type": "deep-dive",
-      "title": "“无出路咖啡馆”其实是什么",
-      "body": "书名的“咖啡馆”并非商店，而是一群穷困华人艺术家聚居的公寓。“天长地久汤”是用跳蚤市场的过期菜肉熬成的一锅共食——象征这个走投无路却彼此取暖的移民小共同体。",
-      "anchorText": "天长地久汤",
-      "chapterHref": "article_320784.html",
-      "references": []
-    },
-    {
-      "type": "deep-dive",
-      "title": "海青的装置艺术",
-      "body": "海青用有机玻璃与灯光造出一座随观者移动而变幻的“视觉迷宫”——这是典型的装置艺术（installation art）。叙述者面对它“头晕眼花”又不懂装懂的窘态，写活了外行与前卫艺术之间的隔阂。",
-      "anchorText": "安装在地板上和天花板上的若干盏灯",
-      "chapterHref": "article_320784.html",
-      "references": []
-    },
-    {
-      "type": "connection",
-      "title": "当解放军军装成了画衣",
-      "body": "王阿花披着一件满是油彩的解放军旧军装作画衣。革命符号在异国被挪用为波希米亚式的日常穿着，这种反差是离散身份的绝妙注脚——故国记忆被拆解、再拼贴进新的生活。",
-      "anchorText": "身上罩一件满是油彩的解放军旧军装",
-      "chapterHref": "article_320785.html",
-      "references": []
-    },
-    {
-      "type": "background",
-      "title": "母亲的 1949 年",
-      "body": "小说后段插入母亲的传奇：一个精明坚韧的上海少女，正当她周旋于旧世界时，解放军进城、时代骤变。个人命运与 1949 年的历史转折交织，为“我”的性格提供了家族源头。",
-      "anchorText": "解放军大队人马开进了上海",
-      "chapterHref": "article_320817.html",
-      "references": []
-    },
-    {
-      "type": "background",
-      "title": "父亲与“文革”",
-      "body": "审讯者问及父亲在“文化大革命”中被批斗——父亲曾被非官方囚禁三年。家族在历次政治运动中的创伤，是理解叙述者何以从小谙熟“审讯”与“抵赖”的关键背景。",
-      "anchorText": "被批斗过",
-      "chapterHref": "article_320817.html",
-      "references": []
-    }
-  ],
-  "bd6fc958-71d4-48b1-ad7c-c00aedf32628": [
-    {
-      "type": "background",
-      "title": "词人纳兰性德",
-      "body": "纳兰性德（1655–1685），字容若，满洲正黄旗人，权臣明珠之子，官至一等侍卫。其词真挚哀婉，王国维《人间词话》誉为“北宋以来，一人而已”。惜三十一岁早逝。",
-      "anchorText": "纳兰词卷一",
-      "references": [
-        { "label": "维基百科：纳兰性德", "url": "https://zh.wikipedia.org/wiki/纳兰性德" }
-      ]
-    },
-    {
-      "type": "deep-dive",
-      "title": "《忆江南·昏鸦尽》",
-      "body": "开卷第一首。以“昏鸦”“急雪”“胆瓶梅”层层铺出暮寒孤寂，末句“心字已成灰”既写熏香的“心”字盘香烧尽，又双关心灰意冷，是纳兰以物象收束情绪的典型笔法。",
-      "anchorText": "心字已成灰",
-      "references": []
-    },
-    {
-      "type": "background",
-      "title": "什么是“词牌”",
-      "body": "《忆江南》《如梦令》《长相思》并非题目，而是“词牌”——规定字数、句式、平仄与用韵的固定格律框架。同一词牌可填不同内容，故集中常见“又”字标示同调的另一首。",
-      "anchorText": "如梦令",
-      "references": []
-    },
-    {
-      "type": "deep-dive",
-      "title": "“自度曲”：自创的词调",
-      "body": "词多依既有词牌填写，但词人偶尔自创新调，称“自度曲”。编者在此注明“按此调谱律不载，或亦自度曲”，即怀疑《玉连环影》是自度之曲，而非传世常见词牌。",
-      "anchorText": "或亦自度曲",
-      "references": []
-    },
-    {
-      "type": "deep-dive",
-      "title": "《长相思·山一程》",
-      "body": "作于康熙二十一年（1682）随驾东巡、夜宿山海关外途中。上片以“夜深千帐灯”写行营的壮阔，下片以“风一更，雪一更”写征人思乡、“故园无此声”的孤寂，是其边塞词代表作。",
-      "anchorText": "夜深千帐灯",
-      "references": []
-    },
-    {
-      "type": "deep-dive",
-      "title": "《浣溪沙·谁念西风独自凉》",
-      "body": "悼念亡妻卢氏之作。“被酒莫惊春睡重，赌书消得泼茶香”化用李清照与赵明诚“赌书泼茶”的恩爱典故，反衬今日孤清；结句“当时只道是寻常”道尽失去后方知平常之珍贵，为传诵千古的名句。",
-      "anchorText": "当时只道是寻常",
-      "references": [
-        { "label": "维基百科：李清照", "url": "https://zh.wikipedia.org/wiki/李清照" }
-      ]
-    },
-    {
-      "type": "background",
-      "title": "“我是人间惆怅客”",
-      "body": "这句几乎是纳兰的自画像：身为贵胄侍卫却终身郁郁。“断肠声里忆平生”把富贵与哀愁的反差凝成一句，也是后世给他贴上“伤心词人”标签的由来。",
-      "anchorText": "我是人间惆怅客",
-      "references": []
-    },
-    {
-      "type": "deep-dive",
-      "title": "《采桑子·谁翻乐府凄凉曲》",
-      "body": "以“风也萧萧，雨也萧萧”的叠句摹写秋夜愁绪，结句“梦也何曾到谢桥”借用北宋晏几道的“谢桥”意象。全词音韵回环，是纳兰小令中音乐性极强的一首。",
-      "anchorText": "谁翻乐府凄凉曲",
-      "references": []
-    },
-    {
-      "type": "deep-dive",
-      "title": "《画堂春·一生一代一双人》",
-      "body": "起句化用骆宾王“一生一代一双人”，写有情人难成眷属之痛。“浆向蓝桥易乞，药成碧海难奔”连用裴航与嫦娥两典，将咫尺天涯的怅惘推向极致。",
-      "anchorText": "一生一代一双人",
-      "references": []
-    },
-    {
-      "type": "deep-dive",
-      "title": "《木兰花令·拟古决绝词》",
-      "body": "纳兰最负盛名的一句。“人生若只如初见”借汉唐“决绝词”体，托言女子被弃，感叹情之易变；“骊山语罢”暗用唐明皇与杨贵妃典故。短短数句道尽由亲到疏的无常。",
-      "anchorText": "人生若只如初见",
-      "references": []
-    },
-    {
-      "type": "deep-dive",
-      "title": "《蝶恋花·辛苦最怜天上月》",
-      "body": "又一首悼亡词。以月的“一昔如环，夕夕长如玦”比喻团圆之短、离缺之长；“不辞冰雪为卿热”更以极端的痴语明志，是纳兰痴情的极致表达。",
-      "anchorText": "不辞冰雪为卿热",
-      "references": []
-    },
-    {
-      "type": "deep-dive",
-      "title": "《沁园春》：梦见亡妇",
-      "body": "小序记丁巳重阳前三日梦见亡妻淡装素服、执手哽咽，醒后感赋。“瞬息浮生，薄命如斯”一句起调，写生死相隔的锥心之痛，是纳兰悼亡词中篇幅最长、最沉痛的一首。",
-      "anchorText": "瞬息浮生",
-      "references": []
-    },
-    {
-      "type": "deep-dive",
-      "title": "《金缕曲·赠梁汾》",
-      "body": "赠友人顾贞观（号梁汾）之作，写一见如故的知己之情。“德也狂生耳”自称狂士，“青眼高歌俱未老，向尊前、拭尽英雄泪”豪宕悲慨，展现纳兰词少见的慷慨一面。",
-      "anchorText": "德也狂生耳",
-      "references": []
-    },
-    {
-      "type": "connection",
-      "title": "回文词：正读倒读皆成句",
-      "body": "这首《菩萨蛮》是“回文”——每句倒过来读仍成文意，如“雾窗寒对遥天暮，暮天遥对寒窗雾”。回文是极见巧思的文字游戏，纳兰以之写景抒情而不显斧凿，足见其才。",
-      "anchorText": "暮天遥对寒窗雾",
-      "references": []
-    }
-  ],
-  "3f993083-ada0-4da9-a057-f987cd31a588": [
-    {
-      "type": "deep-dive",
-      "title": "气候如何塑造饮食",
-      "body": "高纬度的因纽特人爱吃高油脂的海豹肉（富含 Omega-3），低纬度的南亚人钟情辛辣咖喱——这是气候作用于饮食的缩影：寒带需高热量御寒，热带靠酸辣开胃。1 克脂肪约 9 千卡，是蛋白质、糖类的两倍多。",
-      "anchorText": "Omega-3不饱和脂肪酸",
-      "pageNumber": 2,
-      "references": []
-    },
-    {
-      "type": "background",
-      "title": "竺可桢与气候变迁曲线",
-      "body": "文中的历史气温曲线出自气象学家、地理学家竺可桢 1972 年《中国近五千年来气候变迁的初步研究》。他综合物候、方志与仪器记录，勾勒出历史上暖—冷交替的四个温暖期，是中国历史气候学的奠基之作。",
-      "anchorText": "竺可桢的《中国近五千年来气候变迁的初步研究》",
-      "pageNumber": 3,
-      "references": [
-        { "label": "维基百科：竺可桢", "url": "https://zh.wikipedia.org/wiki/竺可桢" }
-      ]
-    },
-    {
-      "type": "deep-dive",
-      "title": "阿拉伯人为何崇拜星月",
-      "body": "多数古文明崇拜太阳神（象征农业丰收），阿拉伯人却独尊星月。因为他们世居干热沙漠：白昼烈日难熬，夜晚的星月反而为商队指引方向——环境塑造了信仰的取向，也留在了不少国旗的图案上。",
-      "anchorText": "阿拉伯人没有任何对太阳神的崇拜",
-      "pageNumber": 3,
-      "references": []
-    },
-    {
-      "type": "fact-check",
-      "title": "美洲“没有轮子”？",
-      "body": "更准确地说，美洲文明并非不知道轮子——考古出土的中美洲陶制玩具就带有轮轴。通行解释是：因缺乏可驯化的大型挽畜（马、牛等），轮子无法用于运输，故未发展成实用工具，而非从未被发明。",
-      "anchorText": "美洲生物圈缺乏可驯化的大型牲畜",
-      "pageNumber": 4,
-      "references": []
-    },
-    {
-      "type": "deep-dive",
-      "title": "青金石：颜料里的地质学",
-      "body": "中世纪圣母像必用珍贵的青金石蓝，而这种矿料欧洲不产、需从中亚或印度进口，连米开朗琪罗都曾因缺料而搁笔；同期波斯却因就近取材，在细密画中大量使用青金石蓝。一种矿物的分布，直接左右了艺术风格。",
-      "anchorText": "青金石蓝上色",
-      "pageNumber": 5,
-      "references": []
-    },
-    {
-      "type": "deep-dive",
-      "title": "地理与雅典的直接民主",
-      "body": "巴尔干半岛多山贫瘠，古希腊人只能种橄榄、葡萄，靠地中海平静的海面行商换粮。商业文明重个体与契约，容易催生共和政治——雅典把这一趋势推向连现代国家都难做到的“直接民主”。",
-      "anchorText": "雅典等城邦却可以做到连现代国家都无法做到的直接民主制",
-      "pageNumber": 6,
-      "references": []
-    },
-    {
-      "type": "deep-dive",
-      "title": "地震带、灾难与扩张",
-      "body": "有观点认为，频遭地震火山的文明更易形成危机意识，一旦获得优势便倾向扩张。文中以 1923 年关东大地震后日本加快对外侵略为例——不过这只是一种解释，文化、资源等因素同样关键。",
-      "anchorText": "1923年的关东大地震",
-      "pageNumber": 7,
-      "references": [
-        { "label": "维基百科：关东大地震", "url": "https://zh.wikipedia.org/wiki/關東大地震" }
-      ]
-    },
-    {
-      "type": "connection",
-      "title": "《枪炮、病菌与钢铁》",
-      "body": "文中“新地理决定论”的代表作，即贾雷德·戴蒙德 1997 年的《枪炮、病菌与钢铁》(Guns, Germs, and Steel)，曾获普利策奖。它以可驯化动植物、大陆轴线走向等环境因素，解释各文明发展的巨大差异。",
-      "anchorText": "《枪炮、病毒和钢铁》",
-      "pageNumber": 8,
+      "title": "福尔摩斯从哪来",
+      "body": "歇洛克·福尔摩斯首次出现在 1887 年《比顿圣诞年刊》的中篇《血字的研究》。作者阿瑟·柯南·道尔当时还是个不太成功的医生，写侦探小说原是贴补诊所的收入。这个苏格兰医生后来靠福尔摩斯封爵、又恨福尔摩斯占掉自己的历史小说时间——爱恨都写在这篇前言里。",
+      "anchorText": "侦探小说《血字的研究》",
+      "chapterHref": "OPS/chapter1.html",
       "references": [
         {
-          "label": "维基百科：枪炮、病菌与钢铁",
-          "url": "https://zh.wikipedia.org/wiki/枪炮、病菌与钢铁"
+          "label": "Wikipedia: A Study in Scarlet",
+          "url": "https://en.wikipedia.org/wiki/A_Study_in_Scarlet"
         }
       ]
     },
     {
       "type": "controversy",
-      "title": "环境决定论的争议",
-      "body": "环境决定论曾被殖民者用作种族歧视的依据（如文中杰斐逊“热带让人懒惰”之说），二十世纪随民族独立运动受到严厉批判。戴蒙德的“新地理决定论”虽以反馈机制取代种族论，仍被不少学者批评为过度简化、低估了人的能动性。",
-      "anchorText": "热带气候让人们更懒惰",
-      "pageNumber": 8,
+      "title": "作者想杀掉自己的主角",
+      "body": "1891 年道尔写信给母亲：考虑把福尔摩斯干掉，一了百了。两年后《最后一案》真让他和莫里亚蒂一起跌进莱辛巴赫瀑布。读者抗议太猛，1903 年《空屋》又把人救回来。侦探小说很少有这么公开的作者—角色战争。",
+      "anchorText": "葬身莱辛巴赫瀑布",
+      "chapterHref": "OPS/chapter1.html",
+      "references": []
+    },
+    {
+      "type": "connection",
+      "title": "真正的老师是爱伦·坡",
+      "body": "这篇前言把谱系说得很清楚：神探配一个相对笨拙的同伴、用报纸启事把人召到侦探住所，都来自爱伦·坡 1841 年的《莫格街凶杀案》（ Dupin / 译文里的「杜邦」）。书架上现在有这本公版原作，打开就能对上福尔摩斯的配方。",
+      "anchorText": "爱伦﹒坡继承的痕迹",
+      "chapterHref": "OPS/chapter1.html",
+      "references": [
+        {
+          "label": "Open 《莫格街凶杀案》",
+          "url": "/library/7e8c2a14-6b5f-4d91-a3e0-1c9f4b8d2e70"
+        }
+      ]
+    },
+    {
+      "type": "connection",
+      "title": "《波希米亚丑闻》对《失窃的信》",
+      "body": "前言还点了另一篇坡：最显眼的东西藏在最显眼的地方。《波希米亚丑闻》里福尔摩斯去偷回一封要命的信，直接对应坡的《失窃的信》。两套探案是师生关系，不是平行宇宙。",
+      "anchorText": "坡的《失窃的信》",
+      "chapterHref": "OPS/chapter1.html",
+      "references": []
+    },
+    {
+      "type": "deep-dive",
+      "title": "演绎法其实是回溯推理",
+      "body": "福尔摩斯口中的「演绎法」，哲学上更接近皮尔士说的溯因推理（abduction）：从结果倒推最可能的原因。前言把《血字的研究》评为「提出演绎法、并贬低以前的侦探小说」——他瞧不上的，正是只靠巧合破获的老派故事。",
+      "anchorText": "提出演绎法的推理方法",
+      "chapterHref": "OPS/chapter1.html",
+      "references": []
+    },
+    {
+      "type": "background",
+      "title": "苏格兰场是陪衬",
+      "body": "雷斯垂德、葛莱森这些苏格兰场侦探在书里的功能几乎固定：先错一次，再被福尔摩斯纠正。维多利亚时代伦敦警察厅（Scotland Yard）刚建立刑事侦查处不久，私家侦探作为「公职侦探力所难及」的补充，是当时读者很爱看的对照。",
+      "anchorText": "苏格兰场的干探们显得愚笨无能",
+      "chapterHref": "OPS/chapter1.html",
+      "references": []
+    },
+    {
+      "type": "deep-dive",
+      "title": "百分之七的溶液",
+      "body": "《四签名》开篇华生质问注射的是吗啡还是可卡因，福尔摩斯答「可卡因，百分之七的溶液」。1880 年代可卡因在欧美还被当作补品和局麻药卖，弗洛伊德早期甚至写过赞扬文章。译本加注提醒成瘾性——这是后来才压倒性的医学共识。",
+      "anchorText": "这是可卡因，百分之七的溶液",
+      "chapterHref": "OPS/chapter19.html",
+      "references": []
+    },
+    {
+      "type": "background",
+      "title": "贝克街并不凉快",
+      "body": "「贝克街象一座火炉」是《硬纸盒子》的八月开场。221B Baker Street 在现实伦敦是虚构门牌（当时贝克街门号到不了 221），但现在的福尔摩斯博物馆就开在 221B，把小说地址做成了地标。",
+      "anchorText": "贝克街象一座火炉",
+      "chapterHref": "OPS/chapter102.html",
+      "references": []
+    }
+  ],
+  "7e8c2a14-6b5f-4d91-a3e0-1c9f4b8d2e70": [
+    {
+      "type": "connection",
+      "title": "福尔摩斯的配方从这里来",
+      "body": "开篇就点明：这本书是《福尔摩斯探案全集》前言里点名的老师。神探杜邦、略显迟钝的同伴叙事者、把相关人召到侦探住所的报纸启事——柯南·道尔几乎原样搬进了贝克街。两本对照着读，师承一眼能看出来。",
+      "anchorText": "书架上那本福尔摩斯，和这本书是一对",
+      "references": [
+        {
+          "label": "Open 《福尔摩斯探案全集》",
+          "url": "/library/ed91998e-cb87-4934-903c-737d5ca91fc5"
+        }
+      ]
+    },
+    {
+      "type": "background",
+      "title": "杜邦：第一个现代侦探",
+      "body": "C. Auguste Dupin 比福尔摩斯早了四十多年。他不是警察，不住办公室，靠租来的破宅和推理过活。爱伦·坡一共只写了三篇杜邦（莫格街、玛丽·罗杰、失窃的信），却把「私家侦探 + 同伴叙事」的模型一次定型。",
+      "anchorText": "C. Auguste Dupin is the prototype of the modern detective",
+      "references": []
+    },
+    {
+      "type": "deep-dive",
+      "title": "分析力被写成一种快感",
+      "body": "故事开头不写尸体，先写「分析者」从解谜里得到的享受——像力士炫耀肌肉。福尔摩斯后来的小提琴、可卡因、不肯看普通新闻，都是这个「把推理当竞技」的性格放大版。",
+      "anchorText": "so glories the analyst in that moral activity which disentangles",
+      "references": []
+    },
+    {
+      "type": "deep-dive",
+      "title": "密室里的非人凶手",
+      "body": "莫格街的门锁从里面锁死，警方只会朝「哪个人进得去」想。杜邦的转折是：凶手不必是人。逃掉的 Borneo orangutan 用剃刀制造了那场大屠杀——密室推理的第一次经典解法，不是更聪明的人，而是分类问错了。",
+      "anchorText": "a very large, tawny Ourang-Outang of the Bornese species",
+      "references": []
+    },
+    {
+      "type": "connection",
+      "title": "那则启事，福尔摩斯用过很多次",
+      "body": "杜邦不审犯人，他登广告：一只走失的猩猩，物归原主请来 Faubourg St. Germain。水手自己上门，案子就破了。福尔摩斯前言里说「如法炮制过多遍」——《血字的研究》里那种把人召到贝克街的手法，源头就是这段。",
+      "anchorText": "The advertisement, as Dupin had anticipated, brought the sailor to our door",
+      "references": []
+    }
+  ],
+  "d726a766-f064-4aca-80ea-66d5df953ab6": [
+    {
+      "type": "background",
+      "title": "Agrippa and the forbidden curriculum",
+      "body": "Cornelius Agrippa was a Renaissance magus; his books mix Neoplatonism with what the eighteenth century already called exploded science. Victor’s father waves him off as “sad trash,” and that shrug matters: Frankenstein’s catastrophe starts as a teenage reading list nobody bothered to correct.",
+      "anchorText": "a volume of the works of Cornelius Agrippa",
+      "chapterHref": "OEBPS/ch02.xhtml",
+      "references": []
+    },
+    {
+      "type": "deep-dive",
+      "title": "Galvanism: the science under the myth",
+      "body": "Mary Shelley was writing in the wake of Luigi Galvani and Giovanni Aldini, who made dead limbs twitch with electricity. The innkeeper’s lecture on “electricity and galvanism” is the novel’s hinge: alchemy is dumped, and a modern, laboratory kind of horror takes its place.",
+      "anchorText": "electricity and galvanism",
+      "chapterHref": "OEBPS/ch02.xhtml",
+      "references": []
+    },
+    {
+      "type": "background",
+      "title": "A dreary night of November",
+      "body": "The creature is not born in a lightning-struck tower. Shelley puts the awakening on a wet November night in an attic, with a dying candle. The 1931 film invented the rooftop storm; the book’s terror is quieter and closer to a dissection room.",
+      "anchorText": "It was on a dreary night of November",
+      "chapterHref": "OEBPS/ch05.xhtml",
+      "references": []
+    },
+    {
+      "type": "connection",
+      "title": "The creature’s three books",
+      "body": "In the woods the creature finds a dropped portmanteau: Paradise Lost, Plutarch’s Lives, and Goethe’s The Sorrows of Werter (Shelley’s spelling). Milton teaches him to see himself as both Adam and Satan; Plutarch offers republican virtue; Werther models passionate self-destruction. His education is a miniature Western canon.",
+      "anchorText": "Paradise Lost, a volume of Plutarch's Lives, and the Sorrows of Werter",
+      "chapterHref": "OEBPS/ch15.xhtml",
+      "references": []
+    }
+  ],
+  "efcf4f31-c7f0-470c-97c3-71f7ddd4ad9f": [
+    {
+      "type": "deep-dive",
+      "title": "The green light",
+      "body": "Across the bay from West Egg, the light on Daisy’s dock is the novel’s emblem of wanting: close enough to see, never close enough to reach. Fitzgerald later said he almost cut it; it survived because the whole book is that stretch of the arm.",
+      "anchorText": "a single green light, minute and far away",
+      "chapterHref": "OEBPS/ch01.xhtml",
+      "references": []
+    },
+    {
+      "type": "fact-check",
+      "title": "Tom’s “scientific” book is a smear",
+      "body": "‘The Rise of the Coloured Empires’ by ‘this man Goddard’ is Fitzgerald’s parody of Lothrop Stoddard’s The Rising Tide of Color (1920), a real bestseller of scientific racism. Tom is not being profound; he is reciting the decade’s most respectable bigotry.",
+      "anchorText": "The Rise of the Coloured Empires",
+      "chapterHref": "OEBPS/ch01.xhtml",
+      "references": []
+    },
+    {
+      "type": "deep-dive",
+      "title": "The valley of ashes",
+      "body": "Between the Eggs and Manhattan sits a landfill of industrial waste—Fitzgerald’s image of what the party is built on. T. S. Eliot’s The Waste Land (1922) is in the air; so is the actual Flushing ash dump that later became Flushing Meadows.",
+      "anchorText": "This is a valley of ashes",
+      "chapterHref": "OEBPS/ch02.xhtml",
+      "references": []
+    },
+    {
+      "type": "background",
+      "title": "Doctor T. J. Eckleburg",
+      "body": "The faded oculist’s billboard—blue eyes, yellow spectacles, no face—hangs over the ash heap like a cheap god. George Wilson later takes the eyes for the eyes of God. The novel never confirms him; it just lets advertisement and judgment occupy the same sign.",
+      "anchorText": "the eyes of Doctor T. J. Eckleburg",
+      "chapterHref": "OEBPS/ch02.xhtml",
+      "references": []
+    },
+    {
+      "type": "deep-dive",
+      "title": "Boats against the current",
+      "body": "The last sentence is the book in miniature: American striving as a rowing machine that only ever returns you to what you already lost. Gatsby’s future was always a refurbished past with Daisy in it.",
+      "anchorText": "boats against the current, borne back ceaselessly into the past",
+      "chapterHref": "OEBPS/ch09.xhtml",
+      "references": []
+    }
+  ],
+  "ca8e7c9d-d23e-43fa-85bd-1b3b71e5fae1": [
+    {
+      "type": "background",
+      "title": "Evacuees, not just adventure",
+      "body": "The four Pevensies are sent to the Professor’s house because of the air-raids: this is the Blitz, 1940. Lewis starts in wartime England so that Narnia’s winter feels like another occupation, not a random fairy-tale climate.",
+      "anchorText": "sent away from London during the war because of the air–raids",
+      "chapterHref": "OEBPS/ch01.xhtml",
+      "references": []
+    },
+    {
+      "type": "connection",
+      "title": "Daughter of Eve",
+      "body": "Mr. Tumnus’s greeting is Genesis in a faun’s mouth: Lucy is not just a girl, she is a child of Eve. Lewis, a Christian apologist, lets Narnia recognize humans the way the King James Bible names them. The Bible on this shelf is the same language.",
+      "anchorText": "you are a Daughter of Eve",
+      "chapterHref": "OEBPS/ch02.xhtml",
+      "references": []
+    },
+    {
+      "type": "deep-dive",
+      "title": "Always winter and never Christmas",
+      "body": "The White Witch’s slogan is the book’s moral weather report: time is stuck, feast days don’t come, and even the calendar has been occupied. Christmas later arriving with Father Christmas is not a cameo—it is the first crack in her magic.",
+      "anchorText": "Always winter and never Christmas",
+      "chapterHref": "OEBPS/ch02.xhtml",
+      "references": []
+    },
+    {
+      "type": "background",
+      "title": "Turkish Delight as bait",
+      "body": "Edmund’s addiction is historically specific: lokum was a scarce wartime luxury in Britain. Lewis needed a sweet that would feel both magical and slightly sinful to a 1940s child—sugar was rationed.",
+      "anchorText": "Turkish Delight",
+      "chapterHref": "OEBPS/ch04.xhtml",
+      "references": []
+    },
+    {
+      "type": "deep-dive",
+      "title": "Aslan is on the move",
+      "body": "The name Aslan is Turkish for lion. When the Beavers whisper that he is coming, spring starts before anyone sees him. Lewis later said he did not begin by encoding the Gospels; the lion arrived, and the Passion story followed.",
+      "anchorText": "They say Aslan is on the move",
+      "chapterHref": "OEBPS/ch07.xhtml",
+      "references": []
+    }
+  ],
+  "8d5c7530-7e88-44d4-b4c3-0c14b97fb2c2": [
+    {
+      "type": "background",
+      "title": "The King James cadence",
+      "body": "Commissioned by James I in 1604 and published in 1611, this translation was meant to unify English worship. Its parallelism and thee/thou rhythm became the default sound of “Bible English,” which later writers—including Lewis in Narnia—could quote by texture alone.",
+      "anchorText": "In the beginning God created the heaven and the earth",
+      "chapterHref": "OEBPS/ch01s01.xhtml",
+      "references": []
+    },
+    {
+      "type": "connection",
+      "title": "Why Narnia says Daughter of Eve",
+      "body": "Genesis 3:20: Adam names his wife Eve, “mother of all living.” That is the line Mr. Tumnus is standing on when he calls Lucy a Daughter of Eve. Open The Lion, the Witch and the Wardrobe beside this page and the greeting stops being decorative.",
+      "anchorText": "Adam called his wife's name Eve; because she was the mother of all living",
+      "chapterHref": "OEBPS/ch01s01.xhtml",
+      "references": []
+    }
+  ],
+  "bc250ad0-8d55-4e5c-b316-697339f54062": [
+    {
+      "type": "background",
+      "title": "The most famous first sentence in the novel",
+      "body": "Austen’s opening is a joke dressed as a proverb: society agrees that a rich bachelor must want a wife—because the neighborhood wants him for its daughters. The irony is the whole marriage market in one clause.",
+      "anchorText": "It is a truth universally acknowledged",
+      "chapterHref": "OEBPS/ch01.xhtml",
+      "references": []
+    },
+    {
+      "type": "background",
+      "title": "Netherfield is the matchmakers’ weather",
+      "body": "A rented estate next door is not scenery; it is a plot device. Mrs. Bennet hears that Netherfield Park is let and immediately starts deploying daughters. In a novel without duels, real estate is the opening gun.",
+      "anchorText": "Netherfield Park is let at last",
+      "chapterHref": "OEBPS/ch01.xhtml",
+      "references": []
+    },
+    {
+      "type": "deep-dive",
+      "title": "Darcy enters as a snub",
+      "body": "The room first admires Darcy’s “fine, tall person,” then drops him when he won’t dance. Pride in this book is social temperature: attractive until it refuses to perform friendliness.",
+      "anchorText": "his friend Mr. Darcy soon drew the attention of the room",
+      "chapterHref": "OEBPS/ch03.xhtml",
+      "references": []
+    }
+  ],
+  "6f890b3b-d444-4677-8bb7-c51227fe2736": [
+    {
+      "type": "background",
+      "title": "A misanthropist’s heaven",
+      "body": "Lockwood’s opening joke—that he and Heathcliff are a “suitable pair to divide the desolation”—is the reader’s first trap. The tenant thinks he has found a fellow recluse; he has walked into a haunted household.",
+      "anchorText": "Mr. Heathcliff and I are such a suitable pair to divide the desolation",
+      "chapterHref": "OEBPS/ch01.xhtml",
+      "references": []
+    },
+    {
+      "type": "deep-dive",
+      "title": "I am Heathcliff",
+      "body": "Cathy’s speech to Nelly is the novel’s theology of love: not “I love him” but identity. Victorian readers found it appalling; it still reads like a refusal of the marriage-plot’s usual arithmetic.",
+      "anchorText": "Nelly, I am Heathcliff",
+      "chapterHref": "OEBPS/ch09.xhtml",
+      "references": []
+    },
+    {
+      "type": "background",
+      "title": "Two houses, one weather system",
+      "body": "Wuthering Heights (the farm) and Thrushcross Grange (the genteel hall) are not just addresses. Brontë splits the book between raw moor and carpeted drawing-room; every character is damaged by crossing the gap.",
+      "anchorText": "occupation of Thrushcross Grange",
+      "chapterHref": "OEBPS/ch01.xhtml",
+      "references": []
+    }
+  ],
+  "d43868d0-b96f-43bf-83a3-faf13a286cb3": [
+    {
+      "type": "background",
+      "title": "开卷那首《临江仙》不是罗贯中写的",
+      "body": "「滚滚长江东逝水」是明人杨慎的词，清初毛宗岗父子改定《三国演义》时拿来当卷首。电视剧《三国演义》把它做成片头曲以后，很多人以为这就是罗贯中原文——版本史上不是。",
+      "anchorText": "调寄《临江仙》",
+      "references": []
+    },
+    {
+      "type": "deep-dive",
+      "title": "分久必合，合久必分",
+      "body": "这八个字是全书的历史哲学：把东汉末年的乱局放进一个循环里，而不是一则道德寓言。它也给后面的桃园、赤壁、出师一个框架——人在 palindrome 里做事，不是在直线上做事。",
+      "anchorText": "分久必合，合久必分",
+      "references": []
+    },
+    {
+      "type": "background",
+      "title": "桃园誓词",
+      "body": "「不求同年同月同日生，只愿同年同月同日死」把异姓结拜写成一种准血缘。后文吕布破徐州、关羽降曹、刘备摔阿斗，全是在还这笔誓。它不是开场彩，是结构。",
+      "anchorText": "不求同年同月同日生，只愿同年同月同日死",
+      "references": []
+    },
+    {
+      "type": "deep-dive",
+      "title": "衣服与手足",
+      "body": "刘备后来说「兄弟如手足，妻子如衣服」——这句被现代读者骂得最多，却是桃园逻辑的延长：政治同盟被写成身体，家庭被写成可替换的装备。毛本把伦理说得这样刺耳，是有意的。",
+      "anchorText": "吾三人桃园结义，不求同生，但愿同死",
+      "references": []
+    }
+  ],
+  "aa98e6de-64d4-4e56-97de-f18791ce0f64": [
+    {
+      "type": "background",
+      "title": "这个版本先讲阿里巴巴",
+      "body": "许多中译本把山鲁佐德的框架放在最前；这个电子本却从阿里巴巴砍柴遇盗开始。故事仍是同一组民间传奇，只是目录被重新排过——所以开卷不是「讲故事的女人」，而是「喊开门的樵夫」。",
+      "anchorText": "弟弟叫阿里巴巴",
+      "chapterHref": "OPS/chapter001-1.html",
+      "references": []
+    },
+    {
+      "type": "deep-dive",
+      "title": "芝麻芝麻，把门儿开开",
+      "body": "口令是谷物名，不是魔法专有名词。阿里巴巴后来急得改喊麦子、辣椒、豆子，石门不动——民间故事用「记错咒语」把贪婪写成喜剧。英语里的 Open sesame 就是这一句的通行译法。",
+      "anchorText": "芝麻芝麻，把门儿开开",
+      "chapterHref": "OPS/chapter001-1.html",
+      "references": []
+    },
+    {
+      "type": "background",
+      "title": "山鲁佐德在书的另一头",
+      "body": "框架故事仍在：暴君山鲁亚尔日娶日杀，宰相的女儿山鲁佐德用「明天再讲」活了一千零一夜。这个本子把序放在后面，但不讲她，整本书的悬念结构就少了一半。",
+      "anchorText": "山鲁佐德是大女儿的芳名",
+      "chapterHref": "OPS/front002.html",
+      "references": []
+    }
+  ],
+  "2d835a36-7d9a-44e0-9895-8a03b5aeaadb": [
+    {
+      "type": "background",
+      "title": "A novel about the idea of knighthood",
+      "body": "This Chivalry is Rafael Sabatini’s 1931 historical novel (opening: “The Lady of Rovieto”), not a treatise. Colombo da Siena is invented as the orphan of a hanged traitor, then sent into a world that already thinks chivalry is a chimera.",
+      "anchorText": "WHEN his father was hanged, his mother died of a broken heart",
+      "chapterHref": "OEBPS/ch02.xhtml",
+      "references": []
+    },
+    {
+      "type": "deep-dive",
+      "title": "Chivalry as an untimely ideal",
+      "body": "The narrator says Colombo is guided by ideals “belonging to the age of chivalry rather than to his own age.” The book’s tension is anachronism: knight-errantry performed after the culture has priced it as a joke.",
+      "anchorText": "lofty ideals belonging to the age of chivalry",
+      "chapterHref": "OEBPS/ch02.xhtml",
+      "references": []
+    }
+  ],
+  "dd57cb5b-5485-4118-8b33-b5df7c31da59": [
+    {
+      "type": "background",
+      "title": "兵经从哪来",
+      "body": "《孙子兵法》大约成书于春秋末期，托名孙武。它被后来的兵家尊为「兵经」「百世谈兵之祖」——不是因为字数多（十三篇很短），而是因为它把战争写成可以计算的决策，而不是天命或勇气的比赛。",
+      "anchorText": "被人们尊奉为“兵经”“百世谈兵之祖”",
+      "chapterHref": "OEBPS/Text/Section0002.xhtml",
+      "references": []
+    },
+    {
+      "type": "connection",
+      "title": "第一个系统作注的是曹操",
+      "body": "前言写得很清楚：历史上第一个系统给《孙子兵法》作注的，是三国的曹操。书架上的《三国演义》里那个「治世能臣、乱世奸雄」，在真实历史上首先是个读兵书的人。两本可以对着看：演义给脸谱，兵法给方法。",
+      "anchorText": "第一个系统为《孙子兵法》作注解的人就是三国时著名的政治家、军事家曹操",
+      "chapterHref": "OEBPS/Text/Section0002.xhtml",
+      "references": []
+    },
+    {
+      "type": "deep-dive",
+      "title": "兵者，诡道也",
+      "body": "「诡」在这里主要不是教人阴招，而是说战争的信息是不对称的：能让对手误判，才谈得上「计」。后文的示强示弱、声东击西，都是这一句的展开。把它读成厚黑学，会丢掉孙子真正在算的东西——利害与情报。",
+      "anchorText": "兵者，诡道也",
+      "chapterHref": "OEBPS/Text/Section0002_0001.xhtml",
+      "references": []
+    },
+    {
+      "type": "deep-dive",
+      "title": "知彼知己",
+      "body": "「知彼知己，百战不殆」出自谋攻篇，常常被缩成励志口号。原文的下一句更狠：不知彼而知己，一胜一负；两边都不知道，每战必殆。孙子把情报写成胜负比，而不是性格修养。",
+      "anchorText": "知彼知己，百战不殆",
+      "chapterHref": "OEBPS/Text/Section0002_0001_0003.xhtml",
       "references": []
     }
   ]

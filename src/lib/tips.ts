@@ -38,3 +38,15 @@ export const TIP_TYPES: Record<
   connection: { label: "Connection", icon: "⟷", color: "#27a96c" },
   "fact-check": { label: "Fact-check", icon: "✓", color: "#dc2626" },
 };
+
+/** Collapse whitespace so page text can match an authored anchor phrase. */
+export function stripTipText(value: string): string {
+  return value.replace(/\s+/g, "");
+}
+
+/** True when `anchor` appears in `haystack` after whitespace is stripped. */
+export function tipAnchorInText(haystack: string, anchor: string): boolean {
+  const needle = stripTipText(anchor);
+  if (!needle) return false;
+  return stripTipText(haystack).includes(needle);
+}

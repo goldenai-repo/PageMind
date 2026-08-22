@@ -234,14 +234,18 @@
 }
 
 /* Page card viewport: single-page mode keeps the text to a readable column
-   centered within the full-width page block. */
+   centered within the full-width page block.
+   Use width:min() rather than width:100% + max-width: the latter zeroes
+   auto margins first, then shrinks the box from the right (left-aligned
+   column with a blank gutter). */
 .pm-page-viewport {
   width: 100%;
   height: 100%;
 }
 .pm-page-viewport--single {
-  max-width: 44rem;
-  margin: 0 auto;
+  width: min(44rem, 100%);
+  margin-left: auto;
+  margin-right: auto;
 }
 
 /* Shared typography for reflowable content across every reading mode */
@@ -268,8 +272,9 @@
   padding: 2.5rem 3rem;
 }
 .pm-scroll-inner {
-  max-width: 44rem;
-  margin: 0 auto;
+  width: min(44rem, 100%);
+  margin-left: auto;
+  margin-right: auto;
 }
 .pm-scroll-inner img {
   max-width: 100%;

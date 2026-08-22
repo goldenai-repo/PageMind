@@ -1,6 +1,6 @@
 import { createFlowReader } from "./flow-reader";
 import type { ReaderMode } from "./reader-mode";
-import { detectTxtChapters } from "./txt-chapters";
+import { detectTxtChapters, type TxtChapterHit } from "./txt-chapters";
 import type {
   ReaderNavState,
   ReaderRendition,
@@ -19,6 +19,11 @@ export type TxtMountOptions = {
   onTocActive?: (id: string | null) => void;
   /** Max characters laid out at once; larger texts split at paragraph breaks. */
   sectionSize?: number;
+  /**
+   * Stored 目录 from Firestore. When passed (including `[]`), skip KMP.
+   * Omit to detect from `text` (legacy books not yet backfilled).
+   */
+  chapters?: TxtChapterHit[];
 };
 
 const DEFAULT_SECTION_SIZE = 100_000;
@@ -66,13 +71,14 @@ type ResolvedTxtToc = {
 function planTxtReader(
   text: string,
   sectionSize?: number,
+  stored?: TxtChapterHit[],
 ): {
   sections: string[];
   toc: ReaderTocItem[];
   resolved: ResolvedTxtToc[];
 } {
-  // Catalog entries come from KMP chapter markers, not from layout splits.
-  const chapters = detectTxtChapters(text);
+  // Catalog entries come from stored KMP hits, or a one-time detect.
+  const chapters = stored ?? detectTxtChapters(text);
   if (chapters.length === 0) {
     const sections = splitIntoSections(text, sectionSize);
     const start: ResolvedTxtToc = {
@@ -126,8 +132,13 @@ export function mountTxtReader(options: TxtMountOptions): ReaderRendition {
     onToc,
     onTocActive,
     sectionSize,
+    chapters,
   } = options;
-  const { sections, toc, resolved } = planTxtReader(text, sectionSize);
+  const { sections, toc, resolved } = planTxtReader(
+    text,
+    sectionSize,
+    chapters,
+  );
 
   const reader = createFlowReader({
     contentEl,

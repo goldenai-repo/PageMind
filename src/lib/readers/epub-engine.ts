@@ -3,6 +3,7 @@ import JSZip from "jszip";
 import { isolateCss } from "./css-scope";
 import { createFlowReader } from "./flow-reader";
 import type { ReaderMode } from "./reader-mode";
+import { spineIndexForHref } from "./spine-href";
 import type {
   ReaderNavState,
   ReaderRendition,
@@ -149,6 +150,8 @@ export type EpubMountOptions = {
 
 export const CHAPTER_LABEL_RE =
   /^(?:chapter|part|section|book|volume|preface|introduction|intro|conclusion|appendix|epilogue|prologue|afterword)(?:\s+[\w.]+)?\.?$/i;
+
+export { spineIndexForHref } from "./spine-href";
 
 export async function mountEpubReader(
   options: EpubMountOptions,
@@ -356,17 +359,10 @@ export async function mountEpubReader(
   const resolvedToc: ResolvedToc[] = [];
   tocEntries.forEach((entry, i) => {
     const [fileHref, frag] = entry.href.split("#");
-    const file = (fileHref ?? "").replace(/\\/g, "/");
-    const spineIdx = spine.findIndex((s) => {
-      const sh = joinPath(opfDir, s.href).replace(/\\/g, "/");
-      const fh = file;
-      return (
-        sh === fh ||
-        sh.endsWith("/" + fh) ||
-        fh.endsWith("/" + sh) ||
-        sh.split("/").pop() === fh.split("/").pop()
-      );
-    });
+    const spineIdx = spineIndexForHref(
+      spine.map((s) => joinPath(opfDir, s.href)),
+      fileHref ?? "",
+    );
     if (spineIdx < 0) return;
     resolvedToc.push({
       id: `toc-${i}`,
@@ -402,6 +398,17 @@ export async function mountEpubReader(
       return entry
         ? { sectionIdx: entry.sectionIdx, fragment: entry.fragment }
         : null;
+    },
+    hrefForSection: (idx) => {
+      const item = spine[idx];
+      return item ? joinPath(opfDir, item.href) : undefined;
+    },
+    sectionForHref: (href) => {
+      const idx = spineIndexForHref(
+        spine.map((s) => joinPath(opfDir, s.href)),
+        href,
+      );
+      return idx >= 0 ? idx : null;
     },
     tocActive: (idx) => {
       // Exact chapter for this spine item.

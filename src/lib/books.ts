@@ -51,11 +51,21 @@ export type ReadingLocator =
       href?: string;
     };
 
+/** Persisted TXT 目录 entry (char offset + heading). */
+export type TxtChapterMeta = {
+  start: number;
+  label: string;
+};
+
 /** Book metadata from the shared library (no file data). */
 export type BookMeta = {
   id: string;
   title: string;
   ext: BookExt;
+  /** EPUB OPF / PDF Info / Google Books. Missing = legacy filename. */
+  titleSource?: "metadata" | "google-books" | "filename";
+  /** Extracted from EPUB OPF / PDF Info / Google Books when available. */
+  author?: string;
   /** CSS gradient fallback when no cover image */
   cover: string;
   /** Extracted cover thumbnail (EPUB/PDF/TXT); shown on shelf cards */
@@ -66,6 +76,8 @@ export type BookMeta = {
   averageRating?: number;
   /** How many users rated this book. */
   ratingCount?: number;
+  /** TXT only: stored chapter map so the reader does not re-scan. */
+  txtChapters?: TxtChapterMeta[];
 };
 
 /** Wire format for BookMeta over the API. */

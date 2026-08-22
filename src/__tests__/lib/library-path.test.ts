@@ -22,7 +22,7 @@ describe("libraryPath", () => {
   it("builds index and per-book URLs", () => {
     expect(libraryPath()).toBe("/library");
     expect(libraryPath("abc-123")).toBe("/library/abc-123");
-    expect(libraryPath("abc-123", "mine")).toBe("/library/abc-123");
+    expect(libraryPath("abc-123", "mine")).toBe("/library/abc-123?shelf=mine");
     expect(libraryPath(null, "mine")).toBe("/library?shelf=mine");
     expect(libraryPath(null, "home")).toBe("/library");
   });

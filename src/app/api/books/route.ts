@@ -1,16 +1,29 @@
 import { NextResponse } from "next/server";
 
-import { extractBookAuthor } from "@/lib/book-metadata";
+import { extractBookIdentity } from "@/lib/book-metadata";
 import { COVERS, formatSize, isBookExt } from "@/lib/books";
 import { getCurrentUser } from "@/lib/firebase/auth-server";
+import {
+  fetchGoogleBookSummary,
+  GOOGLE_SUMMARY_MATCHER_VERSION,
+  googleBooksApiKey,
+} from "@/lib/google-books";
 import {
   bookMetaFromDoc,
   booksCollection,
   saveBookFile,
   type BookDoc,
 } from "@/lib/library-server";
+import { decodeText } from "@/lib/readers/decode-text";
+import { detectTxtChapters } from "@/lib/readers/txt-chapters";
 
 const MAX_BOOK_BYTES = 30 * 1024 * 1024;
+
+function toArrayBuffer(bytes: Buffer): ArrayBuffer {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy.buffer as ArrayBuffer;
+}
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -65,9 +78,47 @@ export async function POST(request: Request) {
   const { storagePath } = await saveBookFile(id, bytes, ext);
 
   const count = (await booksCollection().count().get()).data().count;
-  const author = await extractBookAuthor(ext, bytes);
+  const identity = await extractBookIdentity(ext, bytes, file.name);
+
+  let title = identity.title;
+  let titleSource = identity.titleSource;
+  let author = identity.author;
+  let googleSummary: BookDoc["googleSummary"];
+
+  try {
+    const found = await fetchGoogleBookSummary({
+      title: identity.title,
+      author,
+      apiKey: googleBooksApiKey(),
+    });
+    if (found) {
+      if (found.authors[0] && !author) author = found.authors[0];
+      if (found.title && identity.titleSource !== "metadata") {
+        title = found.title;
+        titleSource = "google-books";
+      }
+      googleSummary = {
+        text: found.text,
+        title: found.title,
+        infoLink: found.infoLink,
+        volumeId: found.volumeId,
+        fetchedAt: new Date().toISOString(),
+        queryKey: `${title}\n${author ?? ""}`,
+        matcherVersion: GOOGLE_SUMMARY_MATCHER_VERSION,
+      };
+    }
+  } catch (err) {
+    console.error(`Google Books lookup failed for upload ${id}:`, err);
+  }
+
+  const txtChapters =
+    ext === "txt"
+      ? detectTxtChapters(decodeText(toArrayBuffer(bytes)))
+      : undefined;
+
   const doc: BookDoc = {
-    title: file.name.replace(/\.[^/.]+$/, ""),
+    title,
+    titleSource,
     ext,
     cover: COVERS[count % COVERS.length],
     size: formatSize(file.size),
@@ -78,6 +129,10 @@ export async function POST(request: Request) {
     ratingSum: 0,
     ratingCount: 0,
     ...(author ? { author } : {}),
+    ...(googleSummary ? { googleSummary } : {}),
+    ...(ext === "txt"
+      ? { txtChapters: txtChapters ?? [], txtChaptersReady: true }
+      : {}),
   };
   await booksCollection().doc(id).set(doc);
 
@@ -92,6 +147,9 @@ export async function POST(request: Request) {
         addedAt: doc.addedAt,
         averageRating: 0,
         ratingCount: 0,
+        ...(doc.author ? { author: doc.author } : {}),
+        ...(doc.titleSource ? { titleSource: doc.titleSource } : {}),
+        ...(doc.txtChaptersReady ? { txtChapters: doc.txtChapters ?? [] } : {}),
       },
     },
     { status: 201 },

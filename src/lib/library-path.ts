@@ -10,17 +10,23 @@ export function parseLibraryShelf(value: string | null | undefined): LibraryShel
   return "home";
 }
 
+function shelfQuery(shelf?: LibraryShelf | null): string {
+  if (!shelf || shelf === "home") return "";
+  return `?shelf=${shelf}`;
+}
+
 /**
- * Home catalog: `/library` or `/library/{bookId}`.
- * Personal shelves keep `?shelf=` on the index only — detail URLs are Home.
+ * Shelf index: `/library` or `/library?shelf=mine`.
+ * Book overlay/reader: `/library/{bookId}` (Home) or
+ * `/library/{bookId}?shelf=mine` so the shelf under the overlay is preserved.
  */
 export function libraryPath(
   bookId?: string | null,
   shelf?: LibraryShelf | null,
 ): string {
-  if (bookId) return `/library/${encodeURIComponent(bookId)}`;
-  if (!shelf || shelf === "home") return "/library";
-  return `/library?shelf=${shelf}`;
+  const query = shelfQuery(shelf);
+  if (bookId) return `/library/${encodeURIComponent(bookId)}${query}`;
+  return query ? `/library${query}` : "/library";
 }
 
 export function bookReviewsPath(bookId: string): string {

@@ -118,6 +118,20 @@ describe("mountTxtReader", () => {
     ]);
   });
 
+  it("uses stored chapters instead of re-scanning the text", () => {
+    const onToc = vi.fn();
+    mountTxtReader({
+      text: "Chapter 1 Dawn\nhello\n\nChapter 2 Dusk\nbye\n",
+      contentEl: document.createElement("div"),
+      fontSize: 18,
+      onToc,
+      chapters: [],
+    });
+    expect(onToc).toHaveBeenCalledWith([
+      expect.objectContaining({ id: "start", label: "Start" }),
+    ]);
+  });
+
   it("emits a Contents sidebar for real Chapter headings", () => {
     const onToc = vi.fn();
     mountTxtReader({

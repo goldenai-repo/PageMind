@@ -39,7 +39,7 @@ import type {
   ReaderRendition,
   ReaderTocItem,
 } from "@/lib/readers/types";
-import type { TipCard } from "@/lib/tips";
+import { tipAnchorInText, type TipCard } from "@/lib/tips";
 import { cn } from "@/lib/utils";
 
 const READER_MODE_OPTIONS: {
@@ -148,13 +148,12 @@ export function BookReader({ book, onClose, userId, onProgress }: BookReaderProp
     const rendition = renditionRef.current;
     if (!rendition) return;
     let cancelled = false;
-    const strip = (s: string) => s.replace(/\s+/g, "");
     Promise.resolve(rendition.getContext())
       .then((ctx) => {
         if (cancelled) return;
-        const haystack = strip(ctx.text);
+        const haystack = ctx.text;
         setVisibleTips(
-          tips.filter((t) => haystack.includes(strip(t.anchor.text))),
+          tips.filter((t) => tipAnchorInText(haystack, t.anchor.text)),
         );
       })
       .catch(() => {});
@@ -300,6 +299,7 @@ export function BookReader({ book, onClose, userId, onProgress }: BookReaderProp
             onNavChange: handleNavChange,
             onToc: handleToc,
             onTocActive: handleTocActive,
+            chapters: mountedBook.txtChapters,
           });
         } else if (mountedBook.ext === "pdf") {
           if (!(mountedBook.data instanceof ArrayBuffer)) {
@@ -575,6 +575,13 @@ export function BookReader({ book, onClose, userId, onProgress }: BookReaderProp
             tips={tips}
             visibleTips={visibleTips}
             loading={tipsLoading}
+            onSelectTip={(tip) => {
+              void renditionRef.current?.goToPassage?.({
+                text: tip.anchor.text,
+                chapterHref: tip.anchor.chapterHref,
+                pageNumber: tip.anchor.pageNumber,
+              });
+            }}
           />
         ) : null}
       </div>

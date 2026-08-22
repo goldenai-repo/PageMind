@@ -1,7 +1,13 @@
 import { computeSectionProgressPercent } from "@/lib/books";
+import { tipAnchorInText } from "@/lib/tips";
 
 import { mountFlipBook, prefetchFlipBook, type FlipHandle } from "./flip-book";
-import { createPaginator, type Paginator } from "./paginator";
+import {
+  createPaginator,
+  textForFlipSpread,
+  visibleTextInFrame,
+  type Paginator,
+} from "./paginator";
 import type { ReaderMode } from "./reader-mode";
 import type {
   ReaderNavState,
@@ -50,6 +56,10 @@ export type FlowReaderOptions = {
   toc?: ReaderTocItem[];
   /** Resolve a sidebar entry id to a section (+ optional fragment). */
   tocTarget?: (id: string) => { sectionIdx: number; fragment?: string } | null;
+  /** Spine/file href for a section — used by smart notes to jump. */
+  hrefForSection?: (idx: number) => string | undefined;
+  /** Inverse of hrefForSection (filename match is fine). */
+  sectionForHref?: (href: string) => number | null;
   /** Which sidebar entry id is active for a given section. */
   tocActive?: (sectionIdx: number) => string | null;
   /** Emits the sidebar entries once they're known. */
@@ -98,6 +108,8 @@ export function createFlowReader(options: FlowReaderOptions): FlowReader {
     onDestroy,
     tocTarget,
     tocActive,
+    hrefForSection,
+    sectionForHref,
     onToc,
     onTocActive,
   } = options;
@@ -111,6 +123,10 @@ export function createFlowReader(options: FlowReaderOptions): FlowReader {
 
   let paginator: Paginator | null = null;
   let flip: FlipHandle | null = null;
+  /** One string per StPageFlip leaf (empty string = blank pad page). */
+  let flipPageTexts: string[] = [];
+  /** After a note jump, honor this leaf once StPageFlip finishes mounting. */
+  let pendingFlipLeaf: number | null = null;
   let flipObserver: ResizeObserver | null = null;
   let resizeTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -186,6 +202,7 @@ export function createFlowReader(options: FlowReaderOptions): FlowReader {
     clearTimeout(resizeTimer);
     flip?.destroy();
     flip = null;
+    flipPageTexts = [];
     paginator?.destroy();
     paginator = null;
     cardEl = null;
@@ -286,25 +303,30 @@ export function createFlowReader(options: FlowReaderOptions): FlowReader {
     contentEl.style.display = "block";
     contentEl.style.overflow = "auto";
 
-    // Outer sheet fills the reading area (white background always as tall as
-    // the box); the inner column grows with the text and scrolls.
+    // Outer sheet fills the reading area; inner is the centered measure.
+    // Book CSS (html/body → :scope) is applied on a child so it cannot
+    // override the centering margins — Holmes's cnepub stylesheet sets
+    // body { margin-left: 1%; margin-right: 1% } which would otherwise
+    // pin the column to the left in scroll mode.
     const scroller = document.createElement("div");
     scroller.className = "pm-scroll";
     const inner = document.createElement("div");
     inner.className = "pm-scroll-inner";
-    if (flowClassName) inner.classList.add(flowClassName);
-    inner.style.fontSize = `${fontSize}px`;
-    inner.innerHTML = withStyle(currentHtml);
+    const flow = document.createElement("div");
+    if (flowClassName) flow.classList.add(flowClassName);
+    flow.style.fontSize = `${fontSize}px`;
+    flow.innerHTML = withStyle(currentHtml);
+    inner.appendChild(flow);
     scroller.appendChild(inner);
     contentEl.appendChild(scroller);
-    scrollerEl = inner;
+    scrollerEl = flow;
     cardEl = null;
     pagerEl = null;
 
     emitNav(0, 1);
 
     if (opts.fragment) {
-      const target = inner.querySelector("#" + CSS.escape(opts.fragment));
+      const target = flow.querySelector("#" + CSS.escape(opts.fragment));
       target?.scrollIntoView();
     } else {
       contentEl.scrollTop = 0;
@@ -342,9 +364,14 @@ export function createFlowReader(options: FlowReaderOptions): FlowReader {
     };
   }
 
-  function measureColumns(contentW: number, contentH: number): number {
+  function measureFlipColumns(
+    contentW: number,
+    contentH: number,
+  ): { total: number; texts: string[] } {
+    // Laid out off-screen but still painted (no visibility:hidden) so
+    // getClientRects can clip each CSS column the same way the flip pages do.
     const host = document.createElement("div");
-    host.style.cssText = `position:absolute;left:-99999px;top:0;visibility:hidden;width:${contentW}px;height:${contentH}px;overflow:hidden;`;
+    host.style.cssText = `position:absolute;left:-99999px;top:0;width:${contentW}px;height:${contentH}px;overflow:hidden;`;
     if (flowClassName) host.className = flowClassName;
     host.style.fontSize = `${fontSize}px`;
 
@@ -362,8 +389,13 @@ export function createFlowReader(options: FlowReaderOptions): FlowReader {
       1,
       Math.round((host.scrollWidth + FLIP_COL_GAP) / colStride),
     );
+    const texts: string[] = [];
+    for (let i = 0; i < total; i++) {
+      host.scrollLeft = i * colStride;
+      texts.push(visibleTextInFrame(cols, host));
+    }
     document.body.removeChild(host);
-    return total;
+    return { total, texts };
   }
 
   function buildFlipPage(
@@ -409,10 +441,12 @@ export function createFlowReader(options: FlowReaderOptions): FlowReader {
     const { pageW, pageH, contentW, contentH } = computeSpreadSize();
     if (contentW < 40 || contentH < 40) return;
 
-    let total = measureColumns(contentW, contentH);
+    const measured = measureFlipColumns(contentW, contentH);
+    let total = measured.total;
     if (total > MAX_FLIP_PAGES) return; // keep the robust paginated fallback
 
     const faces: HTMLElement[] = [];
+    const texts = measured.texts.slice();
     for (let i = 0; i < total; i++) {
       faces.push(buildFlipPage(pageW, pageH, contentW, contentH, i));
     }
@@ -420,9 +454,14 @@ export function createFlowReader(options: FlowReaderOptions): FlowReader {
     // trailing page so the last spread is never a lone half.
     if (total % 2 === 1) {
       faces.push(buildFlipPage(pageW, pageH, contentW, contentH, null));
+      texts.push("");
       total++;
     }
-    if (mySeq !== seq || destroyed) return;
+    flipPageTexts = texts;
+    if (mySeq !== seq || destroyed) {
+      flipPageTexts = [];
+      return;
+    }
 
     try {
       // Swap the paginated base out for the flip book once it's ready.
@@ -448,16 +487,22 @@ export function createFlowReader(options: FlowReaderOptions): FlowReader {
       });
 
       if (mySeq !== seq || destroyed) {
+        flipPageTexts = [];
         handle.destroy();
         return;
       }
       flip = handle;
+      if (pendingFlipLeaf != null) {
+        handle.turnTo(pendingFlipLeaf);
+        pendingFlipLeaf = null;
+      }
       emitFlipNav();
       // Same click zones as single-page: left → prev, right → next.
       attachTapNav(contentEl);
       watchFlipResize(mySeq);
     } catch {
       // StPageFlip failed — restore the paginated two-column view.
+      flipPageTexts = [];
       if (mySeq !== seq || destroyed) return;
       renderPaginated(2, opts);
       attachTapNav();
@@ -611,18 +656,102 @@ export function createFlowReader(options: FlowReaderOptions): FlowReader {
       if (!target) return;
       return showSection(target.sectionIdx, { fragment: target.fragment });
     },
+    async goToPassage(target: {
+      text: string;
+      chapterHref?: string;
+      pageNumber?: number;
+    }) {
+      const needle = target.text;
+      if (!needle.trim()) return;
+
+      const sectionText = () =>
+        currentHtml
+          .replace(/<style[\s\S]*?<\/style>/gi, " ")
+          .replace(/<[^>]+>/g, " ");
+
+      const revealOnCurrentSection = () => {
+        if (paginator) {
+          for (let p = 0; p < paginator.pageCount; p++) {
+            paginator.goTo(p);
+            if (tipAnchorInText(paginator.getVisibleText(), needle)) {
+              // Spread flip leaves are one CSS column; the paginated
+              // fallback shows two columns per turn.
+              if (mode === "spread") pendingFlipLeaf = p * 2;
+              return true;
+            }
+          }
+          paginator.goTo(0);
+          return tipAnchorInText(paginator.getVisibleText(), needle);
+        }
+        if (flip) {
+          for (let p = 0; p < flipPageTexts.length; p++) {
+            if (tipAnchorInText(flipPageTexts[p] ?? "", needle)) {
+              flip.turnTo(p);
+              emitFlipNav();
+              return true;
+            }
+          }
+          return false;
+        }
+        if (scrollerEl) {
+          const hay = scrollerEl.innerText || "";
+          if (!tipAnchorInText(hay, needle)) return false;
+          const nodes = scrollerEl.querySelectorAll("p, h1, h2, h3, h4, li");
+          for (const el of nodes) {
+            if (tipAnchorInText(el.textContent ?? "", needle)) {
+              el.scrollIntoView({ block: "center" });
+              return true;
+            }
+          }
+          return true;
+        }
+        return tipAnchorInText(sectionText(), needle);
+      };
+
+      let idx: number | null = null;
+      if (target.chapterHref && sectionForHref) {
+        idx = sectionForHref(target.chapterHref);
+      }
+
+      if (idx != null) {
+        await Promise.resolve(showSection(idx));
+        revealOnCurrentSection();
+        return;
+      }
+
+      for (let i = 0; i < sectionCount; i++) {
+        await Promise.resolve(showSection(i));
+        if (!tipAnchorInText(sectionText(), needle)) continue;
+        revealOnCurrentSection();
+        return;
+      }
+    },
     themes: {
       fontSize: setFontSize,
     },
     getContext() {
+      const chapterHref = hrefForSection?.(sectionIdx);
       if (paginator) {
         return {
           text: paginator.getVisibleText(),
           pageNumber: paginator.page + 1,
+          ...(chapterHref ? { chapterHref } : {}),
+        };
+      }
+      if (flip) {
+        // Each StPageFlip leaf still contains the whole chapter (translated
+        // CSS columns). Use the per-leaf strings captured at layout time.
+        return {
+          text: textForFlipSpread(flipPageTexts, flip.index()),
+          pageNumber: flip.index() + 1,
+          ...(chapterHref ? { chapterHref } : {}),
         };
       }
       if (scrollerEl) {
-        return { text: scrollerEl.innerText || "" };
+        return {
+          text: scrollerEl.innerText || "",
+          ...(chapterHref ? { chapterHref } : {}),
+        };
       }
       return { text: "" };
     },
