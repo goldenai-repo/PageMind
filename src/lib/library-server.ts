@@ -26,6 +26,14 @@ import {
  */
 const CHUNK_BYTES = 750 * 1024;
 
+/** Cached Google Books synopsis on `books/{id}`. `text: null` = looked up, none found. */
+export type GoogleSummaryCache = {
+  text: string | null;
+  infoLink?: string | null;
+  volumeId?: string | null;
+  fetchedAt: string;
+};
+
 /** Firestore doc shape for `books/{id}` (shared library). */
 export type BookDoc = {
   title: string;
@@ -35,6 +43,8 @@ export type BookDoc = {
   sizeBytes: number;
   addedAt: string; // ISO 8601
   uploadedBy: string;
+  /** Extracted from EPUB OPF / PDF Info when available. */
+  author?: string;
   /** Present for Storage-backed books. */
   storagePath?: string;
   /** Present for legacy chunk-backed books. */
@@ -43,6 +53,7 @@ export type BookDoc = {
   ratingSum?: number;
   /** Number of users who rated (> 0). */
   ratingCount?: number;
+  googleSummary?: GoogleSummaryCache;
 };
 
 /** Firestore doc shape for `users/{uid}/books/{bookId}` (personal state). */

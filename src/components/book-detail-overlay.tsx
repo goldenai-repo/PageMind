@@ -1,10 +1,12 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Heart, Library, XIcon } from "lucide-react";
 
 import { BookCover } from "@/components/book-cover";
 import { StarRating } from "@/components/star-rating";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogClose,
@@ -19,6 +21,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { formatDate, isInMyLibrary, type LibraryBook } from "@/lib/books";
+import {
+  fetchBookSummary,
+  type BookSummaryJson,
+} from "@/lib/library-api";
 import { cn } from "@/lib/utils";
 
 type BookDetailOverlayProps = {
@@ -205,7 +211,7 @@ export function BookDetailOverlay({
             >
               Summary
             </h3>
-            <div className="mt-3 min-h-24" />
+            <BookSummaryBody bookId={book?.id ?? null} ready={Boolean(book)} />
           </section>
           <section aria-labelledby="book-review-heading" className="mt-8">
             <h3
@@ -219,5 +225,99 @@ export function BookDetailOverlay({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function BookSummaryBody({
+  bookId,
+  ready,
+}: {
+  bookId: string | null;
+  ready: boolean;
+}) {
+  const [state, setState] = useState<
+    | { status: "idle" }
+    | { status: "loading" }
+    | { status: "ready"; data: BookSummaryJson }
+    | { status: "error"; message: string }
+  >({ status: "idle" });
+
+  useEffect(() => {
+    if (!ready || !bookId) {
+      setState({ status: "idle" });
+      return;
+    }
+    let cancelled = false;
+    setState({ status: "loading" });
+    void fetchBookSummary(bookId)
+      .then((data) => {
+        if (!cancelled) setState({ status: "ready", data });
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setState({
+          status: "error",
+          message:
+            err instanceof Error ? err.message : "Could not load summary.",
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [bookId, ready]);
+
+  if (!ready) {
+    return <div className="mt-3 min-h-24" />;
+  }
+
+  if (state.status === "loading" || state.status === "idle") {
+    return (
+      <div className="mt-3 space-y-2" aria-busy="true" aria-live="polite">
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-[92%]" />
+        <Skeleton className="h-4 w-[76%]" />
+        <span className="sr-only">Loading summary</span>
+      </div>
+    );
+  }
+
+  if (state.status === "error") {
+    return (
+      <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+        {state.message}
+      </p>
+    );
+  }
+
+  if (!state.data.text) {
+    return (
+      <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+        No summary found for this title.
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-3">
+      <p className="whitespace-pre-wrap text-[0.925rem] leading-relaxed text-foreground/80">
+        {state.data.text}
+      </p>
+      {state.data.source === "google-books" ? (
+        <p className="mt-3 text-xs text-muted-foreground">
+          {state.data.infoLink ? (
+            <a
+              href={state.data.infoLink}
+              target="_blank"
+              rel="noreferrer"
+              className="underline-offset-2 hover:underline"
+            >
+              From Google Books
+            </a>
+          ) : (
+            "From Google Books"
+          )}
+        </p>
+      ) : null}
+    </div>
   );
 }

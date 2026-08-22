@@ -23,6 +23,9 @@ import {
   saveCachedCover,
 } from "./storage";
 import type { TipCard } from "./tips";
+import type { BookSummaryJson } from "./google-books";
+
+export type { BookSummaryJson };
 
 async function readJson<T>(res: Response): Promise<T> {
   const data = (await res.json().catch(() => ({}))) as T & { error?: string };
@@ -51,6 +54,11 @@ export async function fetchTipsForBook(bookId: string): Promise<TipCard[]> {
   const res = await fetch(`/api/tips/${bookId}`);
   const data = await readJson<{ tips: TipCard[] }>(res);
   return data.tips;
+}
+
+export async function fetchBookSummary(bookId: string): Promise<BookSummaryJson> {
+  const res = await fetch(`/api/books/${bookId}/summary`);
+  return readJson<BookSummaryJson>(res);
 }
 
 export async function uploadBook(file: File): Promise<BookMeta> {

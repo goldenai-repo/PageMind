@@ -9,4 +9,8 @@ Object.defineProperty(URL, "revokeObjectURL", {
 });
 
 // jsdom warns about canvas.getContext() — silence it since pdf.render is mocked
-HTMLCanvasElement.prototype.getContext = vi.fn(() => null) as typeof HTMLCanvasElement.prototype.getContext;
+if (typeof HTMLCanvasElement !== "undefined") {
+  HTMLCanvasElement.prototype.getContext = vi.fn(
+    () => null,
+  ) as typeof HTMLCanvasElement.prototype.getContext;
+}
