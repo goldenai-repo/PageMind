@@ -11,6 +11,7 @@ import { join } from "node:path";
 
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
+import { getStorage } from "firebase-admin/storage";
 
 import { decodeText } from "../src/lib/readers/decode-text";
 
@@ -25,6 +26,14 @@ function normalizeKey(raw: string): string {
   return key.replace(/\\n/g, "\n").trim();
 }
 
+function storageBucketName(): string {
+  const raw =
+    process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET?.trim() ||
+    process.env.FIREBASE_STORAGE_BUCKET?.trim() ||
+    "";
+  return raw.replace(/^gs:\/\//, "");
+}
+
 const app =
   getApps()[0] ??
   initializeApp({
@@ -33,17 +42,21 @@ const app =
       clientEmail: process.env.FIREBASE_ADMIN_CLIENT_EMAIL!,
       privateKey: normalizeKey(process.env.FIREBASE_ADMIN_PRIVATE_KEY ?? ""),
     }),
+    ...(storageBucketName() ? { storageBucket: storageBucketName() } : {}),
   });
 
 const db = getFirestore(app);
 
-async function loadBytes(bookId: string): Promise<Buffer> {
+async function loadBytesFromChunks(bookId: string): Promise<Buffer> {
   const snap = await db
     .collection("books")
     .doc(bookId)
     .collection("chunks")
     .orderBy("index")
     .get();
+  if (snap.empty) {
+    throw new Error("Book file not found (no Storage path and no chunks).");
+  }
   return Buffer.concat(
     snap.docs.map((d) => {
       const raw = d.data().bytes as Buffer | Uint8Array | { toUint8Array(): Uint8Array };
@@ -52,6 +65,18 @@ async function loadBytes(bookId: string): Promise<Buffer> {
       return Buffer.from(raw.toUint8Array()); // Firestore Bytes wrapper
     }),
   );
+}
+
+async function loadBytes(
+  bookId: string,
+  storagePath?: string,
+): Promise<Buffer> {
+  if (storagePath) {
+    const bucket = getStorage(app).bucket(storageBucketName());
+    const [buf] = await bucket.file(storagePath).download();
+    return buf;
+  }
+  return loadBytesFromChunks(bookId);
 }
 
 async function extractText(ext: string, bytes: Buffer): Promise<string> {
@@ -108,6 +133,10 @@ async function extractText(ext: string, bytes: Buffer): Promise<string> {
 
 async function main() {
   const withText = process.argv.includes("--text");
+  const filterRaw = process.argv.find((a) => a.startsWith("--only="))?.slice(7);
+  const filters = filterRaw
+    ? filterRaw.split(",").map((s) => s.trim()).filter(Boolean)
+    : [];
   const snap = await db.collection("books").orderBy("addedAt").get();
   console.log(`\n${snap.size} book(s) in the library:\n`);
 
@@ -116,13 +145,25 @@ async function main() {
 
   for (const doc of snap.docs) {
     const d = doc.data();
-    console.log(`  ${doc.id}  [${d.ext}]  ${d.size}  ${d.title}`);
-    if (!withText) continue;
+    const tips = await doc.ref.collection("tips").count().get();
+    const tipCount = tips.data().count;
+    const match =
+      filters.length === 0 ||
+      filters.some(
+        (f) =>
+          doc.id === f ||
+          doc.id.startsWith(f) ||
+          String(d.title ?? "").includes(f),
+      );
+    console.log(
+      `  ${doc.id}  [${d.ext}]  ${d.size}  ${d.title}  (tips: ${tipCount})${d.storagePath ? "  [storage]" : "  [chunks]"}`,
+    );
+    if (!withText || !match) continue;
     try {
-      const bytes = await loadBytes(doc.id);
-      const text = await extractText(d.ext, bytes);
+      const bytes = await loadBytes(doc.id, d.storagePath as string | undefined);
+      const text = await extractText(d.ext as string, bytes);
       const file = join(outDir, `${doc.id}.txt`);
-      writeFileSync(file, `TITLE: ${d.title}\nEXT: ${d.ext}\n\n${text}`);
+      writeFileSync(file, `TITLE: ${d.title}\nEXT: ${d.ext}\nID: ${doc.id}\n\n${text}`);
       console.log(`      → ${text.length} chars → ${file}`);
     } catch (err) {
       console.log(

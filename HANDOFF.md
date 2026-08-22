@@ -1,217 +1,237 @@
-# HANDOFF — PageMind Book Storage + Library Cloud Sync
+# HANDOFF — PageMind Catalog Titles, URLs, Overlay Routing, TXT TOC
 
-**Date recorded:** 2026-08-10  
-**Branch:** `feat/book-storage` (cut from latest `main` after PR #9 / user-library merge)  
-**Working tree at handoff:** mostly committed; check `git status` — may still have uncommitted TOC/TXT reader fixes (`epub-engine`, `flow-reader`, `txt`, `book-reader`, `txt.test.ts`)  
-**Design doc:** `docs/bookshelf-design.md` (v1.3)  
-**Firebase project:** `goldenai-pagemind` (Blaze + free trial; Storage bucket `goldenai-pagemind.firebasestorage.app`)
+**Date recorded:** 2026-08-22  
+**Branch:** `feat/smart-notes` (cut from `main` after PR #11 merge, `2ec0fe0`)  
+**HEAD at handoff:** `c367036` — `Fix my library book URL ID`  
+**Working tree at handoff:** clean except this file (write it, then commit if the user asks)  
+**This conversation:** [Catalog title and URLs](6e48a7cf-43e5-4181-aa88-728f59d54cf7)  
+**Earlier related chats:**
+- [Book summary API / overlay](4fa87fb7-bb59-4ea0-bda8-5f928c8864df)
+- [Book detail overlay prototype](7e860d60-78b0-4aa3-85a0-d08c08f10c00)
+- Older storage handoff lived in this file (2026-08-10, `feat/book-storage`) — **shipped** as [PR #10](https://github.com/goldenai-repo/PageMind/pull/10). Do not resume that work.
+- `HANDOFF-COCO.md` (2026-08-21) still describes **Smart Notes** as the next product task. This conversation did **not** build Smart Notes.
 
-This note is for a **new conversation with no prior context**. Read this + `docs/bookshelf-design.md` before changing storage, ratings, covers, or reader TOC.
+This note is for a **new conversation with no access to the previous context window**. Trust `git log` + the code if anything here disagrees.
 
 ---
 
 ## 1. What task were we working on?
 
-**Phase 2 book storage / cloud bookshelf** on `feat/book-storage`:
+User opened the reader and overlay and asked four things, then two product corrections:
 
-1. Move catalog file bytes to **Firebase Cloud Storage** (keep Firestore chunk fallback for old books).
-2. Personal shelf state in Firestore: My Books, favorite, want/finished, progress, **personal rating**.
-3. **Home community average rating** (decimal + partial stars + numeric label).
-4. Wire `/library` + Upload UI to cloud APIs (IndexedDB = cache only).
-5. Covers without flash (title art → real EPUB/PDF cover).
-6. Persist **reader mode** (single / scroll / spread) **per user**.
-7. Double-page: same tap left/right page-turn as single page.
-8. Fix TOC chapter highlight for EPUB; **stop inventing fake TXT “Part N” chapters**.
-9. Research (only) how to detect real chapters in TXT later.
+1. **Display titles** — were we using the PDF/EPUB/TXT **filename** or real book metadata? **Must use the real book title. Never show the filename.**
+2. **Google Books matching** — why *The Great Gatsby* failed; show **author** on the book overlay.
+3. **URLs** — Home overlay showed `/library/{uuid}`; My Books / Favorite / etc. stayed on `/library?shelf=mine` with **no id**. User wanted the book **ID in the URL**.
+4. **TXT chapters** — KMP chapter detection existed but ran **every open**. Persist the chapter map in Firestore.
 
-**Product vision (locked earlier):** Home = shared catalog; My Library = personal; soft-delete from My Books does not remove the book from Home.
+Then the user locked routing:
+
+- **Overlay = Home (bookstore) only.**
+- **My Books / Favorite / Want to Read / Finished** → click starts **reading**, no overlay.
 
 ---
 
 ## 2. What is done (current state)
 
-### Commits on this branch (approx.)
+All of the above is implemented and committed on `feat/smart-notes` as `c367036`. **Not pushed** unless the user did it separately. **No PR yet.** Ask before commit/push of this `HANDOFF.md`.
 
-| Commit (short) | Topic |
-|----------------|--------|
-| `a38927f` | Storage for books + rating plumbing |
-| `ab8e669` | Cover rendering / flash fix |
-| `cae6fa9` | Double-page click-to-flip |
-| `c4baf9a` | Rating survives delete / no double-count |
-| (+ possibly more local edits) | EPUB TOC nearest-chapter highlight; TXT no fake TOC |
+### 2a. Overlay vs reader (locked)
 
-Confirm with `git log --oneline main..HEAD`.
+| Surface | Click a cover | URL while book is open |
+|---------|----------------|------------------------|
+| **Home** | Overlay at `/library/{bookId}` | Same; Read keeps the URL; close reader → overlay still there; close overlay → `/library` |
+| **My Books / Favorite / Want / Finished** | **Reader immediately** (no overlay) | `/library/{bookId}?shelf=mine` (or `favorite` / `want` / `finished`); close reader → `/library?shelf=…` |
 
-### Storage / catalog
+Code: `src/components/library-section.tsx`
 
-- **New uploads:** `POST /api/books` → Cloud Storage `books/{bookId}/original.{ext}` + Firestore `books/{bookId}` with `storagePath`.
-- **Old books:** still load via `books/{id}/chunks/*` when `storagePath` missing (`loadBookFile` dual path).
-- **Delete upload (temp admin):** `DELETE /api/books/[id]` removes Storage object + Firestore book (+ chunks/tips).
-- Env: `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=goldenai-pagemind.firebasestorage.app` (**no `gs://` prefix**).
+- `showDetail = isHome && selectedBookId && !currentBook` — overlay **only** on Home.
+- `onOpen`: Home → `openDetail`; other shelves → `openFromShelf` (push ID URL, then `openBook`).
+- `closeReader`: on personal shelves, `router.push(libraryPath(null, shelf))` so the ID does not linger.
 
-### Personal state (`users/{uid}/books/{bookId}`)
+Helpers: `src/lib/library-path.ts`
 
-Fields include: `inMyLibrary`, `favorite`, `status` (`want` \| `finished`), `rating` (0–5), progress / `locator`, `lastOpenedAt`, etc.
+```
+/library                         Home grid
+/library?shelf=mine              My Books grid
+/library/{bookId}                Home overlay (or Home reader on top)
+/library/{bookId}?shelf=mine     My Books reader
+```
 
-- Soft-delete (`DELETE /api/shelf/[bookId]` or `inMyLibrary: false`): clears membership/favorite/status **but keeps `rating` (and progress)**.
-- Re-add restores personal stars.
-- Legacy thin docs under `shelves/{uid}/books` still read as fallback (`listUserBookEntries`).
+**Do not** restore the old `useEffect` that `router.replace`’d personal-shelf URLs back to `?shelf=mine` whenever an id was present. That is why My Books never showed an id.
 
-### Community ratings (Home)
+**Do not** open the overlay from My Books / Favorite / Want / Finished. That was tried in this conversation; the user rejected it.
 
-- Per-user vote source of truth: `books/{bookId}/ratings/{uid}` `{ rating, updatedAt }`.
-- Denormalized on catalog: `ratingSum`, `ratingCount` → average = sum/count (1 decimal).
-- `setCatalogUserRating` recomputes aggregates from the `ratings` subcollection (avoids double-count after soft-delete).
-- **UI:** Home / Upload show **average** + number (`4.0`); My Library shows **personal** interactive stars + number.
-- Star component supports **partial fills** for decimals (`src/components/star-rating.tsx`).
+**Do not** add `/library/{id}/reviews` as a standalone page. Tried in PR #11 era; user rejected it. Reviews stay inside the overlay panel.
 
-### Covers
+### 2b. Book titles — never the filename
 
-- EPUB: embedded cover when present; else title gradient.
-- PDF: page-1 raster; else title gradient.
-- TXT: title gradient only (color from title hash).
-- **EPUB/PDF:** do **not** flash title art first — plain placeholder until real/fallback cover; cache final blob in IndexedDB `pagemind` / store `covers` (DB_VERSION 3).
-- `fetchLibraryBooks` → `attachCachedCovers` for fast refresh.
+Previously `POST /api/books` stored `file.name` minus extension (`sabatini-chivalry`, `various-king-james-bible`). That is what the reader chrome and cards showed.
 
-### Reader mode prefs
+Now, catalog `books/{id}.title` comes from, in order:
 
-- Local: `localStorage` key `pagemind:reader-mode` (+ per-user `pagemind:reader-mode:{uid}`).
-- Cloud: Firestore `users/{uid}.readerMode` via `GET/PATCH /api/user/prefs`.
-- Modes: `flip` (single + tap nav), `scroll`, `spread` (two-page; tap left/right same as single; StPageFlip `disableFlipByClick: true`).
+1. **EPUB** OPF `dc:title` (`titleSource: "metadata"`).
+2. **PDF** Info `/Title` only if it looks like a real name (`titleSource: "metadata"`). Reject Word dumps: `Untitled`, `Microsoft Word - document.docx`, paths, `*.pdf`.
+3. **Google Books** matched volume title (`titleSource: "google-books"`) — used when file metadata is missing (typical PDF/TXT, and EPUB with no `dc:title`).
+4. Filename is only a **search hint**, stored as `titleSource: "filename"` if Google also fails.
 
-### TOC / Contents sidebar
+Key files:
 
-- **EPUB:** real nav/NCX → resolved to spine; active highlight uses exact section match **or nearest previous** TOC row (fixes books where spine ≠ TOC 1:1).
-- **TXT:** **no Contents sidebar** (size-based sections remain for performance only — not chapters).
-- **PDF:** synthetic `Page N` list (not real PDF outline/bookmarks yet).
-- Right panel is **Smart Notes**, not TOC — no chapter highlight there by design.
+- `src/lib/book-metadata.ts` — `extractBookIdentity`, `extractPdfTitle`, `isUsablePdfTitle`, `looksLikeFileStemTitle`, `needsCatalogTitleLookup`, `humanizeFileTitle`.
+- Upload: `src/app/api/books/route.ts` — identity extract + Google lookup in the same POST.
+- Backfill: `GET /api/books/[id]/summary` updates Firestore title/author/`titleSource`.
+- Client: `enrichCatalogTitles` in `src/lib/library-api.ts`, called from `LibrarySection` after the grid paints (same pattern as cover enrich). Opening a book also fetches summary if `needsCatalogTitleLookup`.
 
-### Research done (not implemented): TXT real chapters
+`BookDoc.titleSource`: `"metadata" | "google-books" | "filename"`. Exposed on `BookMeta`.
 
-See §8. Heuristics (EN `Chapter N` / ZH `第X章`) or Markdown `##` markers; hybrid recommended. Do **not** bring back equal-size “Part N” as TOC.
+**Existing books** in Firestore still have slug titles until the next `/summary` (Home overlay, library load enrich, or open-to-read). After that, title is persisted. First Home visit after this change may fire one summary request per unresolved book — then `titleSource` stops the loop.
+
+Overlay also shows **author** under the title (`book.author`, filled from OPF `/Author` / Google). Summary JSON includes `{ title, author }` so the header can update before a catalog reload.
+
+### 2c. Google Books matching (why Gatsby failed)
+
+Matcher: `src/lib/google-books.ts`. Overlay summary: `GET /api/books/[id]/summary`.
+
+**Root cause of “no summary for Great Gatsby”:** we queried `intitle:"the-great-gatsby"` (raw filename). Google Books does not treat that as *The Great Gatsby*. A 7-day **negative cache** (`googleSummary.text: null`) then froze the miss.
+
+Fixes:
+
+- `titleForSearch` / `buildSearchQueries` replace hyphens with spaces, then `intitle:"the great gatsby"`, plus an unquoted fallback.
+- `GOOGLE_SUMMARY_MATCHER_VERSION = 2` — old negative caches retry; successful caches with a slug title and no `cache.title` also retry.
+- `maxResults` 20. Matched volume **title + authors** stored on the cache.
+- If the file had no author, save Google’s author onto `BookDoc.author`.
+
+Env: `GOOGLE_BOOKS_API_KEY` via **Doppler** (`npm run dev` → `doppler run -- next dev`). GCP project **GoldenAI-PageMind**. Without the key, lookup fails and titles fall back to file metadata only.
+
+### 2d. TXT chapter TOC — stored, not re-scanned every open
+
+Algorithm (already existed): KMP in `src/lib/readers/txt-chapters.ts`. Markers: `Chapter N`, `第X章/回/篇…`, `楔子` / `序章`, markdown `#` / `##` / `###`. Duplicate labels (front 目录 vs body) keep the **later** hit. **Never** invent equal-size “Part N” fake chapters.
+
+**Now persisted** on `books/{id}`:
+
+- `txtChapters: { start: number; label: string }[]`
+- `txtChaptersReady: boolean` (so `[]` means “detected, none found”, not “not computed”)
+
+Written at TXT upload (`POST /api/books`) and backfilled on `GET /api/books/[id]/file` if missing. Catalog list includes `txtChapters` when ready. `mountTxtReader({ chapters })` **skips KMP** when `chapters` is passed (including `[]`).
+
+Rendering still splits large chapters into layout sections for performance — that is **not** the TOC.
+
+### 2e. What we did **not** do (still open product work)
+
+**Smart Notes** (original reason for `feat/smart-notes`, see `HANDOFF-COCO.md`):
+
+- Panel exists; Firestore `books/{id}/tips` is read-only.
+- Most books: “No smart notes for this book yet.”
+- No generate API, no seed pipeline, no click-to-highlight.
+- `docs/tip-cards.md` is stale (still talks IndexedDB + user-authored tips).
+
+Ask the user before building Smart Notes (seed vs AI vs manual).
 
 ---
 
-## 3. Tech stack (relevant)
+## 3. Tech stack (this repo)
 
 | Layer | Choice |
 |-------|--------|
-| App | Next.js (repo-specific — read `AGENTS.md` / `node_modules/next/dist/docs/` before inventing APIs) |
-| UI | React client, Tailwind, existing PageMind chrome |
-| Auth | Firebase Auth + Admin session cookies |
-| Catalog metadata | Cloud Firestore `books/{id}` |
-| File bytes | Firebase Storage (new) / Firestore chunks (legacy) |
-| Personal state | Firestore `users/{uid}/books/{bookId}` |
-| Ratings aggregate | `books/{id}/ratings/{uid}` + `ratingSum`/`ratingCount` |
-| Browser cache | IndexedDB `pagemind` (file bytes + covers + tips); legacy per-user IDB still exists but UI should not treat it as source of truth |
-| Readers | `flow-reader` (TXT/EPUB), `pdf.ts`, `flip-book` (spread only) |
+| App | Next.js **16.x** — breaking vs training data. Read `AGENTS.md` + `node_modules/next/dist/docs/`. Route `params` is a `Promise`. |
+| UI | React client, Tailwind v4, shadcn + Base UI (`Button` is `@base-ui/react/button`; `render={<Link />}` needs `nativeButton={false}`) |
+| Auth / data | Firebase Auth + Admin Firestore + Cloud Storage. Project **`goldenai-pagemind`**. Secrets via **Doppler**, not committed `.env.local`. |
+| Catalog | Firestore `books/{id}` |
+| Files | Storage `books/{bookId}/original.{ext}` (legacy: Firestore chunks) |
+| Personal shelf | `users/{uid}/books/{bookId}` |
+| Google synopsis | `books/{id}.googleSummary` |
+| Reader | TXT/EPUB `createFlowReader`; PDF pdf.js; spread = StPageFlip only for `spread` |
+| Tests | Vitest. Node tests for google-books / book-metadata / library-path are green. **jsdom reader tests** can fail on Node 20 (`ERR_REQUIRE_ESM` from `html-encoding-sniffer` / `@exodus/bytes`) — pre-existing; do not rewrite the Vitest config unless asked. |
 
-### Key files
+**Key files for this work**
 
 ```
-src/lib/library-server.ts      # Admin Firestore/Storage, ratings, prefs, dual load
-src/lib/library-api.ts         # Client fetch/upload/shelf/covers/prefs
-src/lib/firebase/admin.ts      # Admin app + getAdminBucket()
-src/lib/storage.ts             # IndexedDB cache (books/tips/covers), DB_VERSION 3
-src/lib/cover.ts               # extractCoverImage / generateTitleCover
-src/lib/books.ts               # types, averageRating, removeFromMyLibrary
-src/app/api/books/route.ts
-src/app/api/books/[id]/route.ts
-src/app/api/books/[id]/file/route.ts
-src/app/api/shelf/route.ts
-src/app/api/shelf/[bookId]/route.ts
-src/app/api/user/prefs/route.ts
+src/lib/book-metadata.ts
+src/lib/google-books.ts
+src/lib/library-path.ts
+src/lib/library-server.ts          # BookDoc.titleSource, txtChapters, googleSummary
+src/lib/library-api.ts             # enrichCatalogTitles, openLibraryBook summary merge
+src/lib/readers/txt-chapters.ts    # KMP detector
+src/lib/readers/txt.ts             # mountTxtReader({ chapters })
+src/app/api/books/route.ts         # upload identity + Google + TXT TOC
+src/app/api/books/[id]/summary/route.ts
+src/app/api/books/[id]/file/route.ts  # TXT TOC backfill
 src/components/library-section.tsx
-src/components/upload-section.tsx
-src/components/book-card.tsx
-src/components/star-rating.tsx
+src/components/book-detail-overlay.tsx
 src/components/book-reader.tsx
-src/lib/readers/flow-reader.ts
-src/lib/readers/epub-engine.ts
-src/lib/readers/txt.ts
-src/lib/readers/flip-book.ts
-src/lib/readers/reader-mode.ts
-docs/bookshelf-design.md
 ```
 
-**Console map for humans:**
-- **Storage** → only files under `books/{bookId}/…`
-- **Firestore** → catalog, `users/…/books`, ratings, tips, prefs on `users/{uid}`
+**Console map**
+
+- Storage → files under `books/{bookId}/…`
+- Firestore catalog → title, author, titleSource, googleSummary, txtChapters
+- Personal state / ratings / tips → not in Storage
 
 ---
 
-## 4. Challenges / where we got stuck or spent time
+## 4. Challenges / where we spent time
 
-1. **Spark → Blaze / $300 credit** — PageMind project was under “No organization”; free-trial billing was on another GCP project (`My First Project`). Fix: link the trial billing account to `goldenai-pagemind`, then Storage Get started. Firebase plan modal does **not** show “$300”.
-2. **Duplicate env bucket** — `.env.local` briefly had `gs://…` which breaks the web SDK; keep bare bucket id only.
-3. **Cover flash** — showing generated title cover then swapping to EPUB/PDF cover on every refresh; fixed with placeholder + IDB cover cache.
-4. **Rating soft-delete bug** — Home average kept old vote while My Library showed 0 after re-add → re-rate double-counted (2 then 4 → avg 3). Fixed by persisting personal rating + `ratings/{uid}` recompute.
-5. **EPUB TOC highlight missing** — `tocActive` required exact spine↔TOC match; many books fail. Fixed with nearest-previous chapter.
-6. **TXT fake TOC** — user rejected size-split “Part N” as chapters; removed Contents for TXT.
-7. **Vitest** — may still fail to start (`std-env` ESM / `vi` in setup); prefer eslint on touched files; don’t trust `tsc` alone for green CI without checking known test setup noise.
+1. **Filename vs metadata** — Gutenberg/Standard Ebooks files are slugs. EPUB usually has `dc:title`; PDF `/Title` is often garbage; TXT has no metadata. Google Books is the real title source for PDF/TXT.
+2. **Gatsby miss** — not a missing API key in the “happy path”; it was `intitle:"slug-with-hyphens"` + negative cache. Easy to misdiagnose as “Google doesn’t have Gatsby.”
+3. **URL vs overlay** — Home used `/library/{id}`; personal shelves skipped the overlay and a `useEffect` **stripped the id**. First fix opened the overlay on every shelf so the URL could hold an id. User then said overlay is Home-only; personal shelves must jump to the reader. Final design: ID in the URL **while reading** on those shelves; overlay still Home-only.
+4. **Title backfill vs API quota** — cannot Google every book on every `GET /api/books`. Enrich after paint; persist `titleSource` so we do not loop. Filename-source + slug-looking titles still retry; `google-books` / `metadata` do not.
+5. **React Compiler lint** on the overlay — `setState` in `useEffect` for panel reset and summary loading. Worked around with keyed panel state (`reviewsForId`) and `key={book.id}` on `BookSummaryBody` so the fetch effect does not sync-set idle/loading.
+6. **Vitest jsdom** — TXT reader tests that need the DOM may not start. Prefer Node-environment tests for metadata/Google/path. Do not “fix” the whole Vitest stack in passing.
 
 ---
 
-## 5. Mistakes / pitfalls to avoid next time
+## 5. Mistakes to avoid next time
 
-1. **Do not** show personal progress on **Home**.
-2. **Do not** remount the reader on every progress field change — key on `book.id` only.
-3. **Do not** treat My Books Delete as catalog delete — soft-remove only; **keep rating**.
-4. **Do not** invent TXT Contents from byte chunks.
-5. **Do not** put `gs://` in `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`.
-6. **Do not** look for favorites/ratings in Storage — they are Firestore-only.
-7. **Do not** use delta-only rating aggregates without a per-uid ratings doc — soft-delete/re-add will corrupt averages.
-8. **Do not** flash title-cover for EPUB/PDF before the real cover is ready.
-9. **Do not** invent Next.js APIs from training data — follow this repo’s Next + `AGENTS.md`.
-10. **Do not** commit `.env.local` / service account keys.
-11. Ask before committing/pushing unless the user requests it.
+1. **Do not show the book overlay on My Books / Favorite / Want / Finished.** Home only. Personal shelves start the reader.
+2. **Do not display the filename (or a hyphenated slug) as the book title.** EPUB `dc:title`, usable PDF `/Title`, or Google Books title. Filename is a search hint only.
+3. **Do not search Google Books with `intitle:"file-name-slug"`.** Hyphens → spaces (`titleForSearch`) or you will miss *The Great Gatsby* and similar.
+4. **Do not strip `/library/{bookId}` on personal shelves** with a `useEffect` that `replace`s to `?shelf=mine` whenever an id is present. That killed shareable/readable URLs. Clear the id **on reader close**, not on mount.
+5. **Do not open overlay from all shelves “just to get an id in the URL.”** Put the id on the reader URL instead.
+6. **Do not invent TXT Contents from equal-size byte chunks / “Part N”.** KMP headings or empty TOC. Persist `txtChapters`; do not re-KMP every open when the map is stored.
+7. **Do not add `/library/{id}/reviews` as a page.** Overlay panel only.
+8. **Do not remount the reader on every progress field change** — key on `book.id`.
+9. **Do not flash generated title-covers** for EPUB/PDF before the real cover.
+10. **Do not put `gs://` in `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`.**
+11. **Do not treat My Books Delete as catalog delete** — soft-remove; keep rating.
+12. **Do not invent Next.js APIs from training data** — this tree is Next 16.
+13. **Ask before commit/push.**
+14. **Do not commit `.env.local` / service account keys.**
 
 ---
 
 ## 6. Known gaps / not done
 
-- [ ] Commit/push any remaining TOC/TXT uncommitted files; open PR for `feat/book-storage` if not already.
-- [ ] Migrate legacy **chunk** books → Storage (`storagePath`).
-- [ ] Deploy **`firestore.rules` / `storage.rules`** (Admin SDK bypasses rules; still needed for client safety / prod).
-- [ ] Backfill / one-time repair of broken `ratingSum`/`ratingCount` for books rated before `ratings/{uid}` existed (re-rate once often fixes).
-- [ ] Optional: store cover images in Storage (today: client extract + IDB only).
-- [ ] TXT **real** chapter detection (heuristics ZH/EN or Markdown) — researched, not implemented.
-- [ ] PDF outline/bookmarks as real TOC (today: Page 1…N).
-- [ ] Home “average” when `ratingCount === 0` already shows `0.0` — confirm UX is desired.
-- [ ] Remove temp Upload “Delete upload” when no longer needed for testing.
-- [ ] Update/replace stale committed `HANDOFF-COCO.md` (older reader-only handoff); this `HANDOFF.md` is the current storage handoff.
-- [ ] Security: App Check banner in console — optional.
+- [ ] **Commit/push this `HANDOFF.md`** if the user wants it on the branch; then **PR `feat/smart-notes`** when they ask (currently 1 commit ahead of `main`: `c367036`).
+- [ ] Smoke: Home overlay still works; My Books click skips overlay and reads; URL has id while reading; close returns to `?shelf=mine`.
+- [ ] Smoke: slug-named books (`sabatini-chivalry`, `various-king-james-bible`, Gatsby) show **real titles** after one library load / open; overlay shows **author**.
+- [ ] Smoke: TXT Contents come from stored chapters, not a rescan (and not fake Part N).
+- [ ] Existing Firestore rows: title backfill is lazy. If enrich/`/summary` fails (no API key, quota), cards stay on the old slug until a later success.
+- [ ] `needsCatalogTitleLookup`: after a failed Google lookup we set `titleSource: "filename"`. Humanized titles with spaces then **stop** retrying. A later quota recovery will not auto-fix those until matcher/source is bumped or the user re-uploads.
+- [ ] Smart Notes (see `HANDOFF-COCO.md` §0) — not started in this conversation.
+- [ ] PDF outline/bookmarks as real TOC (today: outline when present; otherwise pages).
+- [ ] Cover images still client-extract + IndexedDB, not Storage.
+- [ ] Legacy chunk-backed books → Storage migration; deploy `firestore.rules` / `storage.rules`.
+- [ ] jsdom Vitest `ERR_REQUIRE_ESM` on Node 20.
 
 ---
 
 ## 7. Suggested next steps
 
-1. `git status` — finish commit of leftover reader/TOC files if dirty.
-2. Smoke test: upload → Storage object; rate → `users/…/books` + `books/…/ratings/{uid}`; soft-delete → re-add → stars restored; Home avg updates 2→4 correctly; EPUB Contents highlight; TXT has **no** Contents.
-3. Implement TXT chapter detector (ZH `第X章` + EN `Chapter`) with sanity bounds; empty TOC if detection fails.
-4. Chunk→Storage migration script + rules files.
-5. PR to `main` when smoke tests pass.
+1. User smoke-test titles + Home overlay vs My Books reader + URLs (list in §6).
+2. If titles still show slugs: check Doppler `GOOGLE_BOOKS_API_KEY`, Network tab `GET /api/books/{id}/summary`, Firestore `books/{id}.title` / `titleSource` / `googleSummary`.
+3. When the user is done with this catalog polish: either PR `feat/smart-notes` as-is, or start Smart Notes (ask seed vs AI vs manual first).
+4. Do not mix a Smart Notes implementation into a titles/URL PR unless they ask.
 
 ---
 
-## 8. TXT chapter research (summary for implementers)
+## 8. User preferences observed
 
-Plain TXT has no native TOC. Options:
-
-1. **Heuristics:** line looks like a heading (EN Chapter/Part; ZH 第X章/回/篇; ALL CAPS; blank-line gated; reject dialogue/mid-sentence). See Readest, plaintxt-epub, Calibre discussions.
-2. **Explicit markers:** Markdown `## Title` (most reliable; Calibre’s preferred TXT path).
-3. **Hybrid (recommended):** try heuristics → if chapter count sane, show Contents; else no sidebar (current). Never use equal-size parts as chapters.
-
-Rendering may still split large TXT into sections for performance — keep that separate from TOC.
-
----
-
-## 9. User preferences observed
-
-- Concise answers; bilingual OK when explaining product/setup.
-- Design docs English; chat can be EN/中文.
+- Concise answers; English is fine.
+- **Overlay is a bookstore (Home) feature**, not a library-shelf feature.
+- **Always show the real book title**, never the file name.
+- Book permalink should include the **catalog UUID**.
+- TXT chapters must be **detected once and stored**, never fake Part N.
 - Ask before commit/push.
-- Strong opinions: no fake TXT chapters; ratings survive soft-delete; Home shows shared average with number + partial stars; covers shouldn’t flash.
+- Strong older opinions still in force: ratings survive soft-delete; Home shows shared average; covers should not flash; no `/library/{id}/reviews` page.
 
 ---
 
