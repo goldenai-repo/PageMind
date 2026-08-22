@@ -1,3 +1,48 @@
+/**
+ * Text nodes whose line boxes intersect `clip`. Used by the CSS-column
+ * paginator and by two-page flip (each flip leaf is one column, but the
+ * DOM still holds the whole chapter, so innerText is the wrong haystack).
+ */
+export function visibleTextInFrame(root: Node, clip: HTMLElement): string {
+  const vp = clip.getBoundingClientRect();
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const parts: string[] = [];
+  let node: Node | null;
+  while ((node = walker.nextNode())) {
+    const text = node.textContent;
+    if (!text || !text.trim()) continue;
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    // A text node (e.g. a paragraph) can span multiple columns; include it
+    // if any of its line rects fall within the clip's visible frame.
+    for (const r of range.getClientRects()) {
+      if (
+        r.right >= vp.left &&
+        r.left <= vp.right &&
+        r.bottom >= vp.top &&
+        r.top <= vp.bottom
+      ) {
+        parts.push(text);
+        break;
+      }
+    }
+  }
+  return parts.join(" ").replace(/\s+/g, " ").trim();
+}
+
+/** Visible haystack for a landscape spread: left page plus the facing page. */
+export function textForFlipSpread(
+  pageTexts: readonly string[],
+  leftIndex: number,
+): string {
+  const start = leftIndex % 2 === 0 ? leftIndex : Math.max(0, leftIndex - 1);
+  return [pageTexts[start], pageTexts[start + 1]]
+    .filter((t): t is string => typeof t === "string" && t.trim().length > 0)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export type Paginator = {
   readonly page: number;
   readonly pageCount: number;
@@ -116,30 +161,7 @@ export function createPaginator(options: PaginatorOptions): Paginator {
       );
     },
     getVisibleText() {
-      const vp = viewport.getBoundingClientRect();
-      const walker = document.createTreeWalker(pager, NodeFilter.SHOW_TEXT);
-      const parts: string[] = [];
-      let node: Node | null;
-      while ((node = walker.nextNode())) {
-        const text = node.textContent;
-        if (!text || !text.trim()) continue;
-        const range = document.createRange();
-        range.selectNodeContents(node);
-        // A text node (e.g. a paragraph) can span multiple columns; include it
-        // if any of its line rects fall within the viewport's visible frame.
-        for (const r of range.getClientRects()) {
-          if (
-            r.right >= vp.left &&
-            r.left <= vp.right &&
-            r.bottom >= vp.top &&
-            r.top <= vp.bottom
-          ) {
-            parts.push(text);
-            break;
-          }
-        }
-      }
-      return parts.join(" ").replace(/\s+/g, " ").trim();
+      return visibleTextInFrame(pager, viewport);
     },
     reset,
     reflow,

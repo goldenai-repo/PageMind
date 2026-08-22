@@ -1,8 +1,9 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 
-import { stripTipText, tipAnchorInText } from "@/lib/tips";
+import { textForFlipSpread } from "@/lib/readers/paginator";
 import { spineIndexForHref } from "@/lib/readers/spine-href";
+import { stripTipText, tipAnchorInText } from "@/lib/tips";
 
 describe("stripTipText", () => {
   it("collapses whitespace so page text can match an authored anchor", () => {
@@ -33,6 +34,19 @@ describe("tipAnchorInText", () => {
     expect(
       tipAnchorInText("王冠宝石案 华生回到贝克街", "爱伦﹒坡继承的痕迹"),
     ).toBe(false);
+  });
+});
+
+describe("textForFlipSpread", () => {
+  const pages = ["left leaf", "right leaf", "next left", ""];
+
+  it("joins the open pair of leaves", () => {
+    expect(textForFlipSpread(pages, 0)).toBe("left leaf right leaf");
+    expect(textForFlipSpread(pages, 2)).toBe("next left");
+  });
+
+  it("snaps an odd index back to the left page of that spread", () => {
+    expect(textForFlipSpread(pages, 1)).toBe("left leaf right leaf");
   });
 });
 

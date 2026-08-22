@@ -4,6 +4,8 @@ export type FlipHandle = {
   destroy(): void;
   next(): void;
   prev(): void;
+  /** Jump without the flip animation (used when a smart note is clicked). */
+  turnTo(page: number): void;
   index(): number;
   count(): number;
   isAtStart(): boolean;
@@ -116,6 +118,10 @@ export async function mountFlipBook(
     },
     next: () => flip.flipNext(),
     prev: () => flip.flipPrev(),
+    turnTo(page: number) {
+      const n = Math.max(0, Math.min(count() - 1, page));
+      flip.turnToPage(n);
+    },
     index,
     count,
     isAtStart: () => index() <= 0,
